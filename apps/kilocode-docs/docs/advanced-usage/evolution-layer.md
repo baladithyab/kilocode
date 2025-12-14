@@ -65,27 +65,33 @@ The bootstrap process creates the following structure under the `.kilocode` dire
 
 ## Mode Map Sync
 
-The Evolution Layer includes a **Mode Map Sync** capability that ensures your project's custom modes are correctly registered in `.kilocode/modes.json` and synchronized with the VS Code extension.
+The Evolution Layer includes a **Mode Map Sync** capability that keeps your Evolution Mode Map in sync (seat → profile mappings), ensuring `.kilocode/evolution/council.yaml` stays aligned with `docs/llm-mode-map.yaml`.
 
 ### Using VS Code
 
 1.  Open the Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`).
-2.  Run **`Evolution: Sync Mode Map`**.
-3.  Kilo Code will scan your `.kilocode/modes` directory and propose updates to the mode registry.
+2.  Run **`Kilo Code: Sync Evolution Mode Map (Preview)`**.
+3.  Review the proposed changes (diff + proposal artifacts) before applying.
+
+To apply the sync from VS Code, run **`Kilo Code: Sync Evolution Mode Map (Apply)`**.
 
 ### Using the CLI
 
 ```bash
-kilocode evolution sync-modes
+# Preview (default)
+kilocode evolution mode-map sync
+
+# Apply
+kilocode evolution mode-map sync --apply
 ```
 
 ### Safety & Proposals
 
 Mode Map Sync follows the **Propose-and-Apply** pattern:
 
-- **Preview**: It generates a proposal file in `.kilocode/evolution/proposals/` showing the exact JSON changes.
+- **Preview**: It generates proposal artifacts under `.kilocode/evolution/proposals/` showing the exact YAML changes.
 - **Review**: You can inspect the diff before applying.
-- **Apply**: Once confirmed, the changes are written to `.kilocode/modes.json` and an applied record is created.
+- **Apply**: Once confirmed, the changes are written to `.kilocode/evolution/council.yaml` and an applied record is created.
 
 ## Daily Workflow
 
@@ -93,7 +99,7 @@ To keep your Evolution Layer active and healthy, Kilo Code provides tools to int
 
 ### Quick Actions
 
-Use the **`Evolution: Quick Actions`** command in VS Code to access common tasks:
+Use the **`Kilo Code: Evolution: Quick Actions`** command in VS Code to access common tasks:
 
 - Open the latest proposal or applied record.
 - Run a mode map sync.
