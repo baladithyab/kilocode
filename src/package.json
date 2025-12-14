@@ -669,6 +669,18 @@
 					"default": false,
 					"description": "When enabled, show a non-blocking Evolution nudge after a successful task completion."
 				},
+				"kilo-code.evolution.nudges.periodic": {
+					"type": "boolean",
+					"default": false,
+					"description": "When enabled, show a non-blocking periodic Evolution nudge (snoozes on dismiss)."
+				},
+				"kilo-code.evolution.nudges.periodicIntervalHours": {
+					"type": "number",
+					"default": 24,
+					"minimum": 1,
+					"maximum": 720,
+					"description": "Minimum hours between periodic Evolution nudges."
+				},
 				"kilo-code.debug": {
 					"type": "boolean",
 					"default": false,

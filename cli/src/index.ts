@@ -315,6 +315,7 @@ evolution
 		".kilocode/evolution/cli-profiles.yaml",
 	)
 	.option("--no-write-proposal", "Do not write proposal artifacts under .kilocode/evolution/proposals/")
+	.option("--verbose", "Print structured logs (JSON)", false)
 	.action(async (options) => {
 		try {
 			await runEvolutionModeMapSyncCli({
@@ -323,6 +324,7 @@ evolution
 				dryRun: Boolean(options.dryRun),
 				writeProposal: Boolean(options.writeProposal),
 				cliProfileMapPath: options.cliProfileMap,
+				verbose: Boolean(options.verbose),
 			})
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
@@ -372,7 +374,7 @@ program
 
 			console.log("\nNext steps")
 			console.log(`- Run council: kilocode council run --workspace ${options.workspace} --trace ${relTrace}`)
-			console.log(`- Preview latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
+			console.log(`- Open latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)
@@ -398,6 +400,7 @@ program
 		".kilocode/evolution/cli-profiles.yaml",
 	)
 	.option("--out-dir <path>", "Output directory (relative to workspace)", ".kilocode/evals/reports")
+	.option("--verbose", "Print structured logs (JSON)", false)
 	.action(async (options) => {
 		try {
 			const result = await runCouncilRunCli({
@@ -406,6 +409,7 @@ program
 				councilConfigPath: options.councilConfig,
 				cliProfileMapPath: options.cliProfileMap,
 				outDir: options.outDir,
+				verbose: Boolean(options.verbose),
 			})
 			console.log(result.reportsDir)
 
@@ -416,7 +420,7 @@ program
 			console.log(
 				`- Generate proposal: kilocode evolve propose --workspace ${options.workspace} --trace ${options.trace} --reports ${relReports}`,
 			)
-			console.log(`- Preview latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
+			console.log(`- Open latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)
@@ -450,7 +454,7 @@ program
 			console.log("\nNext steps")
 			console.log(`- Proposal directory: ${relProposalDir}`)
 			console.log(`- Review proposal markdown: ${relProposalMd}`)
-			console.log(`- Preview latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
+			console.log(`- Open latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)

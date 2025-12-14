@@ -21,14 +21,19 @@ export type EvolutionModeMapSyncCliArgs = {
 	dryRun?: boolean
 	writeProposal?: boolean
 	cliProfileMapPath?: string
+	verbose?: boolean
 }
 
-function logEvent(event: {
-	event: string
-	phase: "start" | "end" | "error"
-	ts: string
-	data?: Record<string, unknown>
-}): void {
+function logEvent(
+	verbose: boolean,
+	event: {
+		event: string
+		phase: "start" | "end" | "error"
+		ts: string
+		data?: Record<string, unknown>
+	},
+): void {
+	if (!verbose) return
 	console.log(JSON.stringify(event))
 }
 
@@ -52,11 +57,12 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 		dryRun = true,
 		writeProposal = true,
 		cliProfileMapPath = DEFAULT_CLI_PROFILE_MAP_PATH,
+		verbose = false,
 	} = args
 
 	const absWorkspace = path.resolve(workspaceRoot)
 
-	logEvent({
+	logEvent(verbose, {
 		event: "evolution.modeMapSync",
 		phase: "start",
 		ts: new Date().toISOString(),
@@ -73,7 +79,7 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 	try {
 		plan = await planModeMapSync({ projectRoot: absWorkspace })
 	} catch (error) {
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.modeMapSync",
 			phase: "error",
 			ts: new Date().toISOString(),
@@ -120,7 +126,7 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 		console.log("- Preview latest artifacts: kilocode evolution open")
 		console.log("- Apply: kilocode evolution mode-map sync --apply")
 
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.modeMapSync",
 			phase: "end",
 			ts: new Date().toISOString(),
@@ -134,7 +140,7 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 	}
 
 	if (!process.stdin.isTTY) {
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.modeMapSync",
 			phase: "error",
 			ts: new Date().toISOString(),
@@ -165,7 +171,7 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 	try {
 		cliProfileNames = await loadCliProfileNames(path.resolve(absWorkspace, cliProfileMapPath))
 	} catch (error) {
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.modeMapSync",
 			phase: "error",
 			ts: new Date().toISOString(),
@@ -189,7 +195,7 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 
 	if (!result.changed) {
 		console.log("\nNo changes to apply.")
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.modeMapSync",
 			phase: "end",
 			ts: new Date().toISOString(),
@@ -210,7 +216,7 @@ export async function runEvolutionModeMapSyncCli(args: EvolutionModeMapSyncCliAr
 	console.log("- Preview latest artifacts: kilocode evolution open")
 	console.log("- Run council on a trace to validate the seats: kilocode council run --trace <trace.v1.json>")
 
-	logEvent({
+	logEvent(verbose, {
 		event: "evolution.modeMapSync",
 		phase: "end",
 		ts: new Date().toISOString(),

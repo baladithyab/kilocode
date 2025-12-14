@@ -23,14 +23,19 @@ export type CouncilRunCliArgs = {
 	councilConfigPath?: string
 	cliProfileMapPath?: string
 	outDir?: string
+	verbose?: boolean
 }
 
-function logEvent(event: {
-	event: string
-	phase: "start" | "end" | "error"
-	ts: string
-	data?: Record<string, unknown>
-}): void {
+function logEvent(
+	verbose: boolean,
+	event: {
+		event: string
+		phase: "start" | "end" | "error"
+		ts: string
+		data?: Record<string, unknown>
+	},
+): void {
+	if (!verbose) return
 	console.log(JSON.stringify(event))
 }
 
@@ -106,6 +111,7 @@ export async function runCouncilRunCli(
 		councilConfigPath = path.join(".kilocode", "evolution", "council.yaml"),
 		cliProfileMapPath = path.join(".kilocode", "evolution", "cli-profiles.yaml"),
 		outDir = path.join(".kilocode", "evals", "reports"),
+		verbose = false,
 	} = args
 
 	const absWorkspace = path.resolve(workspaceRoot)
@@ -113,7 +119,7 @@ export async function runCouncilRunCli(
 	const absCouncilConfigPath = path.resolve(absWorkspace, councilConfigPath)
 	const absCliProfileMapPath = path.resolve(absWorkspace, cliProfileMapPath)
 
-	logEvent({
+	logEvent(verbose, {
 		event: "evolution.council.run",
 		phase: "start",
 		ts: new Date().toISOString(),
@@ -151,7 +157,7 @@ export async function runCouncilRunCli(
 			completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
 		})
 
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.council.run",
 			phase: "end",
 			ts: new Date().toISOString(),
@@ -163,7 +169,7 @@ export async function runCouncilRunCli(
 
 		return { reportsDir: result.reportsDir, scorecardPaths: result.scorecardPaths }
 	} catch (error) {
-		logEvent({
+		logEvent(verbose, {
 			event: "evolution.council.run",
 			phase: "error",
 			ts: new Date().toISOString(),

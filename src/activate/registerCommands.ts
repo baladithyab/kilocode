@@ -7,13 +7,15 @@ import { applyEvolutionBootstrap, planEvolutionBootstrap } from "../shared/evolu
 import { applyModeMapSync, planModeMapSync, writeModeMapSyncProposalArtifacts } from "../shared/evolution/modeMapSync"
 import { runCouncilReview } from "../shared/evolution/councilRunner"
 import { generateEvolutionProposalFromScorecards as generateEvolutionProposalFromScorecardsShared } from "../shared/evolution/proposalGenerator"
-import { findLatestEvolutionArtifacts } from "../shared/evolution/artifacts"
+import { findLatestEvolutionArtifact, findLatestEvolutionArtifacts } from "../shared/evolution/artifacts"
+import { hoursToMs, shouldShowPeriodicNudge } from "../shared/evolution/nudges"
+import { isEvolutionBootstrapped } from "../shared/evolution/workspace"
 import { TraceExporter } from "../core/traces/TraceExporter"
 import { singleCompletionHandler } from "../utils/single-completion-handler"
 
 import { DIFF_VIEW_URI_SCHEME } from "../integrations/editor/DiffViewProvider"
 
-import type { CommandId } from "@roo-code/types"
+import { RooCodeEventName, type CommandId } from "@roo-code/types"
 import { TelemetryService } from "@roo-code/telemetry"
 
 import { getCommand } from "../utils/commands"
@@ -89,6 +91,253 @@ function logEvolutionEvent(outputChannel: vscode.OutputChannel, event: Evolution
 	outputChannel.appendLine(`[evolution] ${JSON.stringify(event)}`)
 }
 
+let evolutionOutputChannel: vscode.OutputChannel | undefined
+
+function getEvolutionOutputChannel(context: vscode.ExtensionContext): vscode.OutputChannel {
+	if (!evolutionOutputChannel) {
+		evolutionOutputChannel = vscode.window.createOutputChannel("Kilo Code: Evolution")
+		context.subscriptions.push(evolutionOutputChannel)
+	}
+	return evolutionOutputChannel
+}
+
+type PeriodicNudgeWorkspaceState = {
+	lastNudgeAtMs?: number
+	lastTaskCompletedAtMs?: number
+}
+
+type PeriodicNudgeStateByWorkspace = Record<string, PeriodicNudgeWorkspaceState>
+
+const PERIODIC_NUDGE_STATE_KEY = "kilo-code.evolution.nudges.periodicStateByWorkspace"
+
+function loadPeriodicNudgeState(context: vscode.ExtensionContext): PeriodicNudgeStateByWorkspace {
+	return (context.globalState.get(PERIODIC_NUDGE_STATE_KEY) as PeriodicNudgeStateByWorkspace | undefined) ?? {}
+}
+
+async function savePeriodicNudgeState(
+	context: vscode.ExtensionContext,
+	state: PeriodicNudgeStateByWorkspace,
+): Promise<void> {
+	await context.globalState.update(PERIODIC_NUDGE_STATE_KEY, state)
+}
+
+function getWorkspaceRootForEvolution(): string | undefined {
+	return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+}
+
+async function maybeShowPeriodicEvolutionNudge(args: {
+	context: vscode.ExtensionContext
+	provider: ClineProvider
+	evolutionOutputChannel: vscode.OutputChannel
+	trigger: "startup" | "taskCompleted"
+}): Promise<void> {
+	const { context, provider, evolutionOutputChannel, trigger } = args
+
+	const projectRoot = getWorkspaceRootForEvolution() ?? provider.cwd
+	if (!projectRoot) return
+
+	const config = vscode.workspace.getConfiguration("kilo-code")
+	const enabled = config.get<boolean>("evolution.nudges.periodic", false)
+	if (!enabled) return
+
+	const intervalHours = config.get<number>("evolution.nudges.periodicIntervalHours", 24)
+	const intervalMs = hoursToMs(intervalHours)
+	if (intervalMs <= 0) return
+
+	const bootstrapped = await isEvolutionBootstrapped(projectRoot)
+	if (!bootstrapped) return
+
+	const nowMs = Date.now()
+
+	const stateByWorkspace = loadPeriodicNudgeState(context)
+	const workspaceState: PeriodicNudgeWorkspaceState = stateByWorkspace[projectRoot] ?? {}
+
+	if (trigger === "taskCompleted") {
+		workspaceState.lastTaskCompletedAtMs = nowMs
+	}
+
+	// First-time init: avoid immediately showing a nudge when the setting is toggled on.
+	if (typeof workspaceState.lastNudgeAtMs !== "number") {
+		workspaceState.lastNudgeAtMs = nowMs
+		stateByWorkspace[projectRoot] = workspaceState
+		await savePeriodicNudgeState(context, stateByWorkspace)
+		return
+	}
+
+	const shouldShow = shouldShowPeriodicNudge({
+		enabled,
+		isBootstrapped: bootstrapped,
+		intervalMs,
+		nowMs,
+		lastNudgeAtMs: workspaceState.lastNudgeAtMs,
+		lastTaskCompletedAtMs: workspaceState.lastTaskCompletedAtMs,
+	})
+
+	// Always persist updated lastTaskCompletedAtMs (if any).
+	stateByWorkspace[projectRoot] = workspaceState
+	await savePeriodicNudgeState(context, stateByWorkspace)
+
+	if (!shouldShow) return
+
+	// Snooze immediately to avoid repeated prompts if the message is ignored.
+	workspaceState.lastNudgeAtMs = nowMs
+	stateByWorkspace[projectRoot] = workspaceState
+	await savePeriodicNudgeState(context, stateByWorkspace)
+
+	logEvolutionEvent(evolutionOutputChannel, {
+		event: "vscode.evolution.nudges.periodic",
+		phase: "start",
+		ts: new Date().toISOString(),
+		data: {
+			projectRoot,
+			intervalHours,
+		},
+	})
+
+	try {
+		const choice = await vscode.window.showInformationMessage(
+			"Kilo Code: Evolution: Suggestions",
+			"Run Council on latest task",
+			"Sync Mode Map (Preview)",
+			"Dismiss",
+		)
+
+		if (choice === "Run Council on latest task") {
+			const latestTrace = await findLatestEvolutionArtifact({ projectRoot, kind: "trace" })
+			if (!latestTrace) {
+				await vscode.window.showErrorMessage(
+					"Kilo Code: No trace.v1 artifacts found. Export a trace first (Kilo Code: Export Trace for Council).",
+				)
+				return
+			}
+
+			// Run council directly on the latest trace to match the nudge intent.
+			await runCouncilReviewForTrace({
+				projectRoot,
+				traceAbsPath: latestTrace.absPath,
+				provider,
+				evolutionOutputChannel,
+			})
+		} else if (choice === "Sync Mode Map (Preview)") {
+			await vscode.commands.executeCommand(getCommand("syncEvolutionModeMapPreview"))
+		}
+	} finally {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.nudges.periodic",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: { projectRoot },
+		})
+	}
+}
+
+function initializeEvolutionPeriodicNudge(options: RegisterCommandOptions): void {
+	const { context, provider } = options
+	const evoChannel = getEvolutionOutputChannel(context)
+
+	const onTaskCompleted = () => {
+		void maybeShowPeriodicEvolutionNudge({
+			context,
+			provider,
+			evolutionOutputChannel: evoChannel,
+			trigger: "taskCompleted",
+		})
+	}
+
+	provider.on(RooCodeEventName.TaskCompleted, onTaskCompleted)
+	context.subscriptions.push({
+		dispose: () => provider.off(RooCodeEventName.TaskCompleted, onTaskCompleted),
+	})
+
+	// Also check on startup so nudges can appear after a long gap, even before the next task completes.
+	setTimeout(() => {
+		void maybeShowPeriodicEvolutionNudge({
+			context,
+			provider,
+			evolutionOutputChannel: evoChannel,
+			trigger: "startup",
+		})
+	}, 2_000)
+}
+
+async function runCouncilReviewForTrace(args: {
+	projectRoot: string
+	traceAbsPath: string
+	provider: ClineProvider
+	evolutionOutputChannel: vscode.OutputChannel
+}): Promise<void> {
+	const { projectRoot, traceAbsPath, provider, evolutionOutputChannel } = args
+
+	logEvolutionEvent(evolutionOutputChannel, {
+		event: "vscode.evolution.council.run",
+		phase: "start",
+		ts: new Date().toISOString(),
+		data: {
+			tracePath: nodePath.relative(projectRoot, traceAbsPath),
+			councilConfigPath: ".kilocode/evolution/council.yaml",
+			outDir: ".kilocode/evals/reports",
+		},
+	})
+
+	try {
+		const result = await runCouncilReview({
+			projectRoot,
+			tracePath: traceAbsPath,
+			resolveProfile: async (profileName) => {
+				const { name: _name, ...profile } = await provider.providerSettingsManager.getProfile({
+					name: profileName,
+				})
+				return profile
+			},
+			completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
+		})
+
+		const relReportsDir = nodePath.relative(projectRoot, result.reportsDir)
+
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.council.run",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				reportsDir: relReportsDir,
+				scorecards: result.scorecardPaths.length,
+			},
+		})
+
+		evolutionOutputChannel.appendLine(`Council scorecards written: ${relReportsDir}`)
+		evolutionOutputChannel.appendLine(
+			`Open latest artifacts: Command Palette → "Kilo Code: Evolution: Open Latest Artifact…"`,
+		)
+
+		const choice = await vscode.window.showInformationMessage(
+			`Council scorecards written: ${relReportsDir}. Open latest artifacts: Kilo Code: Evolution: Open Latest Artifact…`,
+			"Open Reports Folder",
+			"Open Latest Artifacts",
+		)
+
+		if (choice === "Open Reports Folder") {
+			await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(result.reportsDir))
+		} else if (choice === "Open Latest Artifacts") {
+			await vscode.commands.executeCommand(getCommand("evolutionOpenLatestArtifact"))
+		}
+	} catch (error) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.council.run",
+			phase: "error",
+			ts: new Date().toISOString(),
+			data: {
+				error: error instanceof Error ? error.message : String(error),
+				recovery:
+					"Verify .kilocode/evolution/council.yaml is valid and referenced profiles exist. Re-export a trace from this workspace, then re-run council.",
+			},
+		})
+
+		await vscode.window.showErrorMessage(
+			`Kilo Code: Failed to run council review: ${error instanceof Error ? error.message : String(error)}`,
+		)
+	}
+}
+
 // kilocode_change start - Agent Manager provider
 let agentManagerProvider: AgentManagerProvider | undefined
 
@@ -106,6 +355,8 @@ export const registerCommands = (options: RegisterCommandOptions) => {
 	// kilocode_change start
 	registerAgentManager(options)
 	// kilocode_change end
+
+	initializeEvolutionPeriodicNudge(options)
 
 	for (const [id, callback] of Object.entries(getCommandsMap(options))) {
 		const command = getCommand(id as CommandId)
@@ -330,8 +581,34 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		}
 
 		const projectRoot = workspaceFolder.uri.fsPath
+		const evoChannel = getEvolutionOutputChannel(context)
 
-		const plan = await planEvolutionBootstrap({ projectRoot })
+		logEvolutionEvent(evoChannel, {
+			event: "vscode.evolution.bootstrap",
+			phase: "start",
+			ts: new Date().toISOString(),
+			data: { projectRoot },
+		})
+
+		let plan
+		try {
+			plan = await planEvolutionBootstrap({ projectRoot })
+		} catch (error) {
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.bootstrap",
+				phase: "error",
+				ts: new Date().toISOString(),
+				data: {
+					error: error instanceof Error ? error.message : String(error),
+					recovery:
+						"Try reloading the workspace, then re-run bootstrap. Ensure the extension has file system access.",
+				},
+			})
+			await vscode.window.showErrorMessage(
+				`Kilo Code: Evolution bootstrap failed: ${error instanceof Error ? error.message : String(error)}`,
+			)
+			return
+		}
 
 		const linesToCreate = plan.toCreate.map((i) => `+ ${i.path}`)
 		const linesSkipped = plan.skipped.map((i) => `= ${i.path} (${i.reason})`)
@@ -356,6 +633,13 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		const projectName = nodePath.basename(projectRoot)
 
 		if (plan.toCreate.length === 0) {
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.bootstrap",
+				phase: "end",
+				ts: new Date().toISOString(),
+				data: { projectRoot, changed: false },
+			})
+
 			await vscode.window.showInformationMessage(
 				`Kilo Code: Evolution Layer already bootstrapped for ${projectName}`,
 				{
@@ -376,17 +660,53 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		)
 
 		if (choice !== "Create") {
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.bootstrap",
+				phase: "end",
+				ts: new Date().toISOString(),
+				data: { projectRoot, changed: false, canceled: true },
+			})
 			return
 		}
 
-		const result = await applyEvolutionBootstrap(plan)
+		let result
+		try {
+			result = await applyEvolutionBootstrap(plan)
+		} catch (error) {
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.bootstrap",
+				phase: "error",
+				ts: new Date().toISOString(),
+				data: {
+					error: error instanceof Error ? error.message : String(error),
+					recovery:
+						"Verify you have write permissions in this workspace. Re-run in a local workspace (not a read-only virtual file system).",
+				},
+			})
+			await vscode.window.showErrorMessage(
+				`Kilo Code: Evolution bootstrap failed: ${error instanceof Error ? error.message : String(error)}`,
+			)
+			return
+		}
 
-		outputChannel.appendLine(`[evolution bootstrap] Project root: ${projectRoot}`)
+		logEvolutionEvent(evoChannel, {
+			event: "vscode.evolution.bootstrap",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				projectRoot,
+				changed: result.created.length > 0,
+				created: result.created.length,
+				suggestions: plan.suggestions.length,
+			},
+		})
+
+		evoChannel.appendLine(`[evolution bootstrap] Project root: ${projectRoot}`)
 		for (const created of result.created) {
-			outputChannel.appendLine(`[evolution bootstrap] created: ${created}`)
+			evoChannel.appendLine(`[evolution bootstrap] created: ${created}`)
 		}
 		for (const suggestion of plan.suggestions) {
-			outputChannel.appendLine(`[evolution bootstrap] suggestion: ${suggestion}`)
+			evoChannel.appendLine(`[evolution bootstrap] suggestion: ${suggestion}`)
 		}
 
 		await vscode.window.showInformationMessage(
@@ -395,7 +715,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 
 		if (plan.suggestions.length > 0) {
 			await vscode.window.showWarningMessage(
-				"Kilo Code: Evolution Layer bootstrap suggestions were generated. See Output → Kilo-Code.",
+				"Kilo Code: Evolution Layer bootstrap suggestions were generated. See Output → Kilo Code: Evolution.",
 			)
 		}
 	},
@@ -408,7 +728,8 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		}
 
 		const projectRoot = workspaceFolder.uri.fsPath
-		logEvolutionEvent(outputChannel, {
+		const evoChannel = getEvolutionOutputChannel(context)
+		logEvolutionEvent(evoChannel, {
 			event: "vscode.evolution.modeMapSync.preview",
 			phase: "start",
 			ts: new Date().toISOString(),
@@ -418,7 +739,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		try {
 			const plan = await planModeMapSync({ projectRoot })
 			if (plan.drift.changes.length === 0) {
-				logEvolutionEvent(outputChannel, {
+				logEvolutionEvent(evoChannel, {
 					event: "vscode.evolution.modeMapSync.preview",
 					phase: "end",
 					ts: new Date().toISOString(),
@@ -430,7 +751,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			}
 
 			const artifacts = await writeModeMapSyncProposalArtifacts(plan)
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.modeMapSync.preview",
 				phase: "end",
 				ts: new Date().toISOString(),
@@ -481,7 +802,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 				await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(artifacts.proposalDir))
 			}
 		} catch (error) {
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.modeMapSync.preview",
 				phase: "error",
 				ts: new Date().toISOString(),
@@ -506,7 +827,8 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		}
 
 		const projectRoot = workspaceFolder.uri.fsPath
-		logEvolutionEvent(outputChannel, {
+		const evoChannel = getEvolutionOutputChannel(context)
+		logEvolutionEvent(evoChannel, {
 			event: "vscode.evolution.modeMapSync.apply",
 			phase: "start",
 			ts: new Date().toISOString(),
@@ -516,7 +838,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		try {
 			const plan = await planModeMapSync({ projectRoot })
 			if (plan.drift.changes.length === 0) {
-				logEvolutionEvent(outputChannel, {
+				logEvolutionEvent(evoChannel, {
 					event: "vscode.evolution.modeMapSync.apply",
 					phase: "end",
 					ts: new Date().toISOString(),
@@ -574,7 +896,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			})
 
 			const proposalDir = result.proposal?.proposalDir
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.modeMapSync.apply",
 				phase: "end",
 				ts: new Date().toISOString(),
@@ -598,7 +920,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 				await vscode.window.showInformationMessage(msg)
 			}
 		} catch (error) {
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.modeMapSync.apply",
 				phase: "error",
 				ts: new Date().toISOString(),
@@ -683,8 +1005,9 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		)
 		if (!redactChoice) return
 
+		const evoChannel = getEvolutionOutputChannel(context)
 		try {
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.trace.export",
 				phase: "start",
 				ts: new Date().toISOString(),
@@ -703,7 +1026,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 				redact: redactChoice.value,
 			})
 
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.trace.export",
 				phase: "end",
 				ts: new Date().toISOString(),
@@ -712,7 +1035,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 
 			await vscode.window.showInformationMessage(`Trace exported: ${result.outputPath}`)
 		} catch (error) {
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: "vscode.evolution.trace.export",
 				phase: "error",
 				ts: new Date().toISOString(),
@@ -782,59 +1105,12 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		})
 		if (!pickedTrace) return
 
-		logEvolutionEvent(outputChannel, {
-			event: "vscode.evolution.council.run",
-			phase: "start",
-			ts: new Date().toISOString(),
-			data: {
-				tracePath: nodePath.relative(projectRoot, pickedTrace.absPath),
-				councilConfigPath: ".kilocode/evolution/council.yaml",
-				outDir: ".kilocode/evals/reports",
-			},
+		await runCouncilReviewForTrace({
+			projectRoot,
+			traceAbsPath: pickedTrace.absPath,
+			provider: visibleProvider,
+			evolutionOutputChannel: getEvolutionOutputChannel(context),
 		})
-
-		try {
-			const result = await runCouncilReview({
-				projectRoot,
-				tracePath: pickedTrace.absPath,
-				resolveProfile: async (profileName) => {
-					const { name: _name, ...profile } = await visibleProvider.providerSettingsManager.getProfile({
-						name: profileName,
-					})
-					return profile
-				},
-				completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
-			})
-
-			logEvolutionEvent(outputChannel, {
-				event: "vscode.evolution.council.run",
-				phase: "end",
-				ts: new Date().toISOString(),
-				data: {
-					reportsDir: nodePath.relative(projectRoot, result.reportsDir),
-					scorecards: result.scorecardPaths.length,
-				},
-			})
-
-			await vscode.window.showInformationMessage(
-				`Council scorecards written: ${nodePath.relative(projectRoot, result.reportsDir)}`,
-			)
-		} catch (error) {
-			logEvolutionEvent(outputChannel, {
-				event: "vscode.evolution.council.run",
-				phase: "error",
-				ts: new Date().toISOString(),
-				data: {
-					error: error instanceof Error ? error.message : String(error),
-					recovery:
-						"Verify .kilocode/evolution/council.yaml is valid and referenced profiles exist. Re-export a trace from this workspace, then re-run council.",
-				},
-			})
-
-			await vscode.window.showErrorMessage(
-				`Kilo Code: Failed to run council review: ${error instanceof Error ? error.message : String(error)}`,
-			)
-		}
 	},
 
 	generateEvolutionProposalFromScorecards: async () => {
@@ -908,6 +1184,18 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			return
 		}
 
+		const evoChannel = getEvolutionOutputChannel(context)
+		logEvolutionEvent(evoChannel, {
+			event: "vscode.evolution.proposal.generate",
+			phase: "start",
+			ts: new Date().toISOString(),
+			data: {
+				tracePath: nodePath.relative(projectRoot, tracePath),
+				reportsDir: nodePath.relative(projectRoot, pickedReportsDir.absPath),
+				outDir: ".kilocode/evolution/proposals",
+			},
+		})
+
 		try {
 			const result = await generateEvolutionProposalFromScorecardsShared({
 				projectRoot,
@@ -915,11 +1203,50 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 				reportsDir: pickedReportsDir.absPath,
 			})
 
-			await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(result.markdownPath))
-			await vscode.window.showInformationMessage(
-				`Evolution proposal generated: ${nodePath.relative(projectRoot, result.proposalDir)}`,
+			const relProposalDir = nodePath.relative(projectRoot, result.proposalDir)
+			const relMarkdownPath = nodePath.relative(projectRoot, result.markdownPath)
+
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.proposal.generate",
+				phase: "end",
+				ts: new Date().toISOString(),
+				data: {
+					proposalDir: relProposalDir,
+					markdownPath: relMarkdownPath,
+				},
+			})
+
+			evoChannel.appendLine(`Evolution proposal generated: ${relProposalDir}`)
+			evoChannel.appendLine(`Proposal markdown: ${relMarkdownPath}`)
+			evoChannel.appendLine(
+				`Open latest artifacts: Command Palette → "Kilo Code: Evolution: Open Latest Artifact…"`,
 			)
+
+			await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(result.markdownPath))
+
+			const choice = await vscode.window.showInformationMessage(
+				`Evolution proposal generated: ${relProposalDir}. Open latest artifacts: Kilo Code: Evolution: Open Latest Artifact…`,
+				"Open Proposal Folder",
+				"Open Latest Artifacts",
+			)
+
+			if (choice === "Open Proposal Folder") {
+				await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(result.proposalDir))
+			} else if (choice === "Open Latest Artifacts") {
+				await vscode.commands.executeCommand(getCommand("evolutionOpenLatestArtifact"))
+			}
 		} catch (error) {
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.proposal.generate",
+				phase: "error",
+				ts: new Date().toISOString(),
+				data: {
+					error: error instanceof Error ? error.message : String(error),
+					recovery:
+						"Ensure the selected council report directory contains scorecard.v1 JSON files, then re-run. Use 'Kilo Code: Evolution: Open Latest Artifact…' to confirm paths.",
+				},
+			})
+
 			await vscode.window.showErrorMessage(
 				`Kilo Code: Failed to generate proposal: ${error instanceof Error ? error.message : String(error)}`,
 			)
@@ -1054,7 +1381,8 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		if (!picked) return
 
 		const { artifact } = picked
-		logEvolutionEvent(outputChannel, {
+		const evoChannel = getEvolutionOutputChannel(context)
+		logEvolutionEvent(evoChannel, {
 			event: `vscode.evolution.openLatestArtifact`,
 			phase: "start",
 			ts: new Date().toISOString(),
@@ -1070,14 +1398,14 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 				await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(artifact.absPath))
 			}
 
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: `vscode.evolution.openLatestArtifact`,
 				phase: "end",
 				ts: new Date().toISOString(),
 				data: { kind: artifact.kind },
 			})
 		} catch (error) {
-			logEvolutionEvent(outputChannel, {
+			logEvolutionEvent(evoChannel, {
 				event: `vscode.evolution.openLatestArtifact`,
 				phase: "error",
 				ts: new Date().toISOString(),
