@@ -1,143 +1,75 @@
-# Evolution Layer Bootstrap Design
+# Evolution Layer Bootstrap
 
-This document outlines the design for the "Evolution Layer bootstrap" feature in Kilo Code, enabling users to easily set up the canonical Evolution Layer scaffold in their projects via both VS Code and CLI.
+This document describes the Evolution Layer “bootstrap” flow: a safe, idempotent way to scaffold the canonical governance artifacts (under `.kilocode/` and `docs/`) and establish restricted Evolution Layer modes.
 
-## 1. Overview
+Bootstrap is designed for two cases:
 
-The goal is to provide a one-step command to generate the standard `.kilocode` directory structure and its contents. This operation must be:
+- **New repo**: no existing Kilo Code / Evolution Layer artifacts.
+- **Existing repo**: a repo that may already contain some Kilo Code artifacts (for example [`.kilocodemodes`](.kilocodemodes:1) or `docs/` governance files). Bootstrap should auto-discover what exists and only create what’s missing.
 
-- **Idempotent**: Can be run multiple times without side effects.
-- **Safe**: Never overwrites existing files (create-missing-only).
-- **Transparent**: Shows a preview of actions before execution.
+## Core properties
 
-## 2. Architecture
+- **Create-missing-only**: never overwrites existing files.
+- **Idempotent**: running bootstrap repeatedly should converge to “nothing to do”.
+- **Transparent**: surfaces a plan (create vs skip) plus suggestions for follow-up steps.
 
-To ensure consistency between the VS Code extension and the CLI, the core logic and templates will be centralized in a shared package.
+The shared implementation is:
 
-### 2.1 Shared Package: `packages/evolution`
+- Planner: [`planEvolutionBootstrap()`](src/shared/evolution/bootstrap.ts:700)
+- Applier: [`applyEvolutionBootstrap()`](src/shared/evolution/bootstrap.ts:789)
 
-A new package `packages/evolution` will be created. It will contain:
+## What bootstrap creates
 
-- **Templates**: The raw content of all files to be scaffolded.
-- **Logic**: The `bootstrapEvolution` function.
+Bootstrap scaffolds a standard set of files.
 
-#### `bootstrapEvolution` Function Signature
+### Canonical governance artifacts
 
-```typescript
-interface BootstrapResult {
-	plan: FileOperation[]
-	suggestions: string[] // e.g., "Add .kilocode to .gitignore"
-}
+These are intended to be **git-tracked**:
 
-interface FileOperation {
-	path: string
-	action: "create" | "skip"
-	reason?: string // e.g., "File already exists"
-}
+- `.kilocode/**` governance directory structure and templates
+- [`docs/llm-council.md`](docs/llm-council.md:1)
+- [`docs/llm-mode-map.yaml`](docs/llm-mode-map.yaml:1)
+- [`docs/kilo-profiles.md`](docs/kilo-profiles.md:1)
+- `scripts/kilo/**` workflow stubs (MVP1)
 
-export async function bootstrapEvolution(cwd: string, dryRun: boolean): Promise<BootstrapResult>
-```
+### Generated config templates
 
-### 2.2 Templates
+Bootstrap can also create these (if missing):
 
-The templates will be extracted from the current `.kilocode` directory in this repository. They will be stored as string constants or loaded from a `templates` directory within the package.
+- `.kilocodemodes` (restricted Evolution Layer modes)
+- `.gitignore` entries for local-only generated outputs (see next section)
 
-**Files to Scaffold:**
+## Existing-repo auto-discovery (bootstrap in a “non-empty” repo)
 
-- `.kilocode/README.md`
-- `.kilocode/rules/evolution-layer.md`
-- `.kilocode/memory/README.md`
-- `.kilocode/skills/README.md`
-- `.kilocode/rubrics/README.md`
-- `.kilocode/traces/README.md`
-- `.kilocode/traces/runs/.gitignore`
-- `.kilocode/evals/README.md`
-- `.kilocode/evals/runs/.gitignore`
-- `.kilocode/evolution/README.md`
-- `.kilocode/evolution/proposals/README.md`
-- `.kilocode/evolution/proposals/0000-template.md`
-- `.kilocode/evolution/applied/README.md`
-- `.kilocode/evolution/applied/0000-template.md`
-- `.kilocode/mcp.json`
+Bootstrap assumes you might be adopting Evolution Layer governance in a repo that already has some Kilo Code usage.
 
-## 3. Integration Points
+The planner will:
 
-### 3.1 VS Code Extension
+1. **Skip any existing files** (create-missing-only).
+2. Emit **suggestions** instead of editing existing files.
 
-- **Command ID**: `kilo-code.bootstrapEvolution`
-- **Title**: "Kilo Code: Initialize Evolution Layer"
-- **Registration**: `src/activate/registerCommands.ts` (or similar) and `package.json`.
+Examples of auto-discovery guidance:
 
-**UX Flow:**
+- If `.gitignore` already exists, bootstrap does not modify it, but suggests adding entries that keep run outputs out of git.
+- If `.kilocodemodes` already exists, bootstrap does not overwrite it, but suggests ensuring it defines restricted Evolution Layer modes (for example `context-manager` and `eval-engineer`).
 
-1.  User triggers command.
-2.  Extension calls `bootstrapEvolution(workspaceRoot, dryRun=true)`.
-3.  Extension displays a QuickPick or a custom modal showing the plan:
-    - "✅ Create .kilocode/README.md"
-    - "⏭️ Skip .kilocode/rules/evolution-layer.md (exists)"
-4.  User confirms.
-5.  Extension calls `bootstrapEvolution(workspaceRoot, dryRun=false)`.
-6.  Extension shows success notification and displays any suggestions (e.g., "Please add .kilocode to your .gitignore").
+This is how “bootstrap an existing repo with auto-discovery functionality” works in practice: it avoids destructive edits, but still helps you converge by telling you what is missing.
 
-### 3.2 CLI
+## Follow-up steps after bootstrap
 
-- **Command**: `kilo init` (or `kilo evolution init`)
-- **Implementation**: `cli/src/commands/init.ts`
+### 1) Sync council configuration to the mode map
 
-**UX Flow:**
+Bootstrap creates the mode map (source of truth), but governance execution relies on `.kilocode/evolution/council.yaml`.
 
-1.  User runs `kilo init`.
-2.  CLI calls `bootstrapEvolution(cwd, dryRun=true)`.
-3.  CLI prints the plan to stdout:
-    ```
-    Plan:
-    [+] .kilocode/README.md
-    [=] .kilocode/rules/evolution-layer.md (exists, skipping)
-    ...
-    ```
-4.  CLI asks for confirmation: "Proceed? [y/N]"
-5.  If yes, CLI calls `bootstrapEvolution(cwd, dryRun=false)`.
-6.  CLI prints success message and suggestions.
+After bootstrap, run Mode Map Sync to align `docs/llm-mode-map.yaml` with `.kilocode/evolution/council.yaml`:
 
-## 4. Handling External Files
+- See [`docs/evolution-mode-map-sync.md`](docs/evolution-mode-map-sync.md:1)
 
-The bootstrap process will **not** modify files outside of `.kilocode` (like `.gitignore` or `.kilocodemodes`). Instead, it will generate suggestions.
+### 2) Keep large generated outputs out of git
 
-- **`.gitignore`**: Suggest adding `.kilocode/traces/runs/` and `.kilocode/evals/runs/` if not present (though the scaffolded `.gitignore` files inside those dirs handle this, the root `.gitignore` might also need attention for the whole `.kilocode` folder if it's meant to be private, but usually it's committed. The prompt implies `.gitignore` might need updates).
-    - _Correction_: The prompt says "How to handle existing .kilocodemodes and .gitignore without editing them (generate suggestions only)".
-    - The `bootstrapEvolution` function will check if `.kilocodemodes` exists and if it contains the necessary mode definitions. If not, it adds a suggestion.
-    - It will check `.gitignore` for relevant entries.
+Bootstrap’s standard ignores for local runs are:
 
-## 5. Test Strategy
+- `.kilocode/traces/runs/`
+- `.kilocode/evals/runs/`
 
-### 5.1 Unit Tests (`packages/evolution`)
-
-- Test `bootstrapEvolution` with an empty directory (all files created).
-- Test `bootstrapEvolution` with a fully populated directory (all files skipped).
-- Test `bootstrapEvolution` with partial population (mixed create/skip).
-- Test `dryRun` mode (no files written).
-
-### 5.2 Integration Tests (CLI)
-
-- Run `kilo init` in a temp dir and verify file structure.
-- Run `kilo init` again and verify idempotency.
-
-### 5.3 Integration Tests (VS Code)
-
-- (Optional/Manual) Verify command appears in palette and executes correctly.
-
-## 6. Implementation Steps
-
-1.  **Create `packages/evolution`**:
-    - Set up `package.json`, `tsconfig.json`.
-    - Copy templates from current repo.
-    - Implement `bootstrapEvolution`.
-2.  **Wire up CLI**:
-    - Add `cli/src/commands/init.ts`.
-    - Register in `cli/src/commands/index.ts`.
-3.  **Wire up Extension**:
-    - Add command to `package.json`.
-    - Register handler in `src/extension.ts` (or `activate` module).
-4.  **Verify**:
-    - Run tests.
-    - Manual test in a dummy project.
+These are enforced by per-folder ignore files (for example [`.kilocode/traces/runs/.gitignore`](.kilocode/traces/runs/.gitignore:1)), and bootstrap will also suggest root `.gitignore` entries when appropriate.
