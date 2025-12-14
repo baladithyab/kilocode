@@ -62,3 +62,65 @@ The bootstrap process creates the following structure under the `.kilocode` dire
 - **`.kilocode/evolution/applied/README.md`**: Directory for applied evolution records.
 - **`.kilocode/evolution/applied/0000-template.md`**: Template for applied records.
 - **`.kilocode/mcp.json`**: Configuration for the Model Context Protocol (MCP).
+
+## Mode Map Sync
+
+The Evolution Layer includes a **Mode Map Sync** capability that ensures your project's custom modes are correctly registered in `.kilocode/modes.json` and synchronized with the VS Code extension.
+
+### Using VS Code
+
+1.  Open the Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`).
+2.  Run **`Evolution: Sync Mode Map`**.
+3.  Kilo Code will scan your `.kilocode/modes` directory and propose updates to the mode registry.
+
+### Using the CLI
+
+```bash
+kilocode evolution sync-modes
+```
+
+### Safety & Proposals
+
+Mode Map Sync follows the **Propose-and-Apply** pattern:
+
+- **Preview**: It generates a proposal file in `.kilocode/evolution/proposals/` showing the exact JSON changes.
+- **Review**: You can inspect the diff before applying.
+- **Apply**: Once confirmed, the changes are written to `.kilocode/modes.json` and an applied record is created.
+
+## Daily Workflow
+
+To keep your Evolution Layer active and healthy, Kilo Code provides tools to integrate it into your daily routine.
+
+### Quick Actions
+
+Use the **`Evolution: Quick Actions`** command in VS Code to access common tasks:
+
+- Open the latest proposal or applied record.
+- Run a mode map sync.
+- Bootstrap missing files.
+- View recent traces or evaluation reports.
+
+### Nudges (Opt-in)
+
+You can configure Kilo Code to gently remind you to check the Evolution Layer status.
+
+Add these settings to your `.vscode/settings.json` or user settings:
+
+```json
+{
+	"kilo-code.evolution.nudges.postTask": true,
+	"kilo-code.evolution.nudges.periodic": true,
+	"kilo-code.evolution.nudges.periodicIntervalHours": 24
+}
+```
+
+- **`postTask`**: Checks for pending proposals after completing a task.
+- **`periodic`**: Checks periodically (default every 24 hours) for stale artifacts or needed updates.
+
+## Where Outputs Live
+
+The Evolution Layer generates several types of runtime data that are ignored by git (via `.gitignore`) to keep your repository clean:
+
+- **`.kilocode/traces/runs/`**: Execution traces from agent tasks.
+- **`.kilocode/evals/reports/`**: Reports from evaluation runs.
+- **`.kilocode/evolution/proposals/`**: Pending proposals for governance or configuration changes (these _are_ committed until applied).
