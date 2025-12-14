@@ -1,5 +1,13 @@
 import * as vscode from "vscode"
 import delay from "delay"
+import { readdir, readFile, stat } from "node:fs/promises"
+import * as nodePath from "node:path"
+
+import { applyEvolutionBootstrap, planEvolutionBootstrap } from "../shared/evolution/bootstrap"
+import { runCouncilReview } from "../shared/evolution/councilRunner"
+import { generateEvolutionProposalFromScorecards as generateEvolutionProposalFromScorecardsShared } from "../shared/evolution/proposalGenerator"
+import { TraceExporter } from "../core/traces/TraceExporter"
+import { singleCompletionHandler } from "../utils/single-completion-handler"
 
 import type { CommandId } from "@roo-code/types"
 import { TelemetryService } from "@roo-code/telemetry"
@@ -299,6 +307,333 @@ const getCommandsMap = ({ context, outputChannel }: RegisterCommandOptions): Rec
 		}
 	},
 	// kilocode_change end
+	bootstrapEvolution: async () => {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+		if (!workspaceFolder) {
+			await vscode.window.showErrorMessage("Kilo Code: No workspace folder is open.")
+			return
+		}
+
+		const projectRoot = workspaceFolder.uri.fsPath
+
+		const plan = await planEvolutionBootstrap({ projectRoot })
+
+		const linesToCreate = plan.toCreate.map((i) => `+ ${i.path}`)
+		const linesSkipped = plan.skipped.map((i) => `= ${i.path} (${i.reason})`)
+
+		const detailLines = [
+			`Project root: ${projectRoot}`,
+			"",
+			"Would create (create-missing-only; never overwrites):",
+			...(linesToCreate.length > 0 ? linesToCreate : ["(nothing)"]),
+			"",
+			"Skipped:",
+			...(linesSkipped.length > 0 ? linesSkipped : ["(nothing)"]),
+		]
+
+		if (plan.suggestions.length > 0) {
+			detailLines.push("", "Suggestions (not applied automatically):")
+			for (const suggestion of plan.suggestions) {
+				detailLines.push(`- ${suggestion.replaceAll("\n", "\n  ")}`)
+			}
+		}
+
+		const projectName = nodePath.basename(projectRoot)
+
+		if (plan.toCreate.length === 0) {
+			await vscode.window.showInformationMessage(
+				`Kilo Code: Evolution Layer already bootstrapped for ${projectName}`,
+				{
+					modal: true,
+					detail: detailLines.join("\n"),
+				},
+			)
+			return
+		}
+
+		const choice = await vscode.window.showInformationMessage(
+			`Kilo Code: Bootstrap Evolution Layer for ${projectName}? (${plan.toCreate.length} file(s) to create)`,
+			{
+				modal: true,
+				detail: detailLines.join("\n"),
+			},
+			"Create",
+		)
+
+		if (choice !== "Create") {
+			return
+		}
+
+		const result = await applyEvolutionBootstrap(plan)
+
+		outputChannel.appendLine(`[evolution bootstrap] Project root: ${projectRoot}`)
+		for (const created of result.created) {
+			outputChannel.appendLine(`[evolution bootstrap] created: ${created}`)
+		}
+		for (const suggestion of plan.suggestions) {
+			outputChannel.appendLine(`[evolution bootstrap] suggestion: ${suggestion}`)
+		}
+
+		await vscode.window.showInformationMessage(
+			`Kilo Code: Evolution Layer bootstrap complete (created ${result.created.length} file(s)).`,
+		)
+
+		if (plan.suggestions.length > 0) {
+			await vscode.window.showWarningMessage(
+				"Kilo Code: Evolution Layer bootstrap suggestions were generated. See Output → Kilo-Code.",
+			)
+		}
+	},
+
+	exportTraceForCouncil: async () => {
+		const visibleProvider = getVisibleProviderOrLog(outputChannel)
+		if (!visibleProvider) return
+
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+		if (!workspaceFolder) {
+			await vscode.window.showErrorMessage("Kilo Code: No workspace folder is open.")
+			return
+		}
+
+		const projectRoot = workspaceFolder.uri.fsPath
+		const currentTaskId = visibleProvider.getCurrentTask()?.taskId
+
+		let selectedTaskId: string | undefined = undefined
+		let selectedHistoryItem = undefined
+
+		if (currentTaskId) {
+			const choice = await vscode.window.showQuickPick(
+				[
+					{ label: "Use current task", description: currentTaskId },
+					{ label: "Pick from history…", description: "Select a past task" },
+				],
+				{ title: "Kilo Code: Export Trace for Council" },
+			)
+
+			if (!choice) return
+			if (choice.label === "Use current task") {
+				selectedTaskId = currentTaskId
+			} else {
+				// fall through to history selection
+			}
+		}
+
+		if (!selectedTaskId) {
+			const history = visibleProvider.getTaskHistory()
+			const items = history
+				.slice()
+				.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+				.slice(0, 200)
+				.map((h) => ({
+					label: `#${h.number} ${h.task}`,
+					description: h.id,
+					detail: h.workspace ? `${h.workspace}${h.mode ? ` • ${h.mode}` : ""}` : h.mode,
+					h,
+				}))
+
+			const picked = await vscode.window.showQuickPick(items, {
+				title: "Select task to export",
+				matchOnDescription: true,
+				matchOnDetail: true,
+			})
+
+			if (!picked) return
+			selectedTaskId = picked.h.id
+			selectedHistoryItem = picked.h
+		} else {
+			selectedHistoryItem = visibleProvider.getTaskHistory().find((h) => h.id === selectedTaskId)
+		}
+
+		const redactChoice = await vscode.window.showQuickPick(
+			[
+				{ label: "Export with redaction (recommended)", value: true },
+				{ label: "Export without redaction", value: false },
+			],
+			{ title: "Trace redaction" },
+		)
+		if (!redactChoice) return
+
+		try {
+			const result = await TraceExporter.exportTraceForCouncil({
+				workspaceRoot: projectRoot,
+				globalStoragePath: visibleProvider.contextProxy.globalStorageUri.fsPath,
+				taskId: selectedTaskId,
+				historyItem: selectedHistoryItem,
+				redact: redactChoice.value,
+			})
+
+			await vscode.window.showInformationMessage(`Trace exported: ${result.outputPath}`)
+		} catch (error) {
+			await vscode.window.showErrorMessage(
+				`Kilo Code: Failed to export trace: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+	},
+
+	runCouncilReviewTrace: async () => {
+		const visibleProvider = getVisibleProviderOrLog(outputChannel)
+		if (!visibleProvider) return
+
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+		if (!workspaceFolder) {
+			await vscode.window.showErrorMessage("Kilo Code: No workspace folder is open.")
+			return
+		}
+
+		const projectRoot = workspaceFolder.uri.fsPath
+		const tracesDir = nodePath.join(projectRoot, ".kilocode", "traces", "runs")
+
+		type TracePickItem = vscode.QuickPickItem & { absPath: string; mtimeMs: number }
+		const traceItems: TracePickItem[] = []
+
+		try {
+			const entries = await readdir(tracesDir, { withFileTypes: true })
+			for (const ent of entries) {
+				if (!ent.isFile()) continue
+				if (!ent.name.startsWith("trace.v1.")) continue
+				if (!ent.name.endsWith(".json")) continue
+
+				const absPath = nodePath.join(tracesDir, ent.name)
+				const s = await stat(absPath)
+				traceItems.push({
+					label: ent.name,
+					description: nodePath.relative(projectRoot, absPath),
+					detail: new Date(s.mtimeMs).toLocaleString(),
+					absPath,
+					mtimeMs: s.mtimeMs,
+				})
+			}
+		} catch {
+			// no traces dir yet
+		}
+
+		if (traceItems.length === 0) {
+			await vscode.window.showErrorMessage(
+				"Kilo Code: No exported traces found. Run 'Kilo Code: Export Trace for Council' first.",
+			)
+			return
+		}
+
+		traceItems.sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+		const pickedTrace = await vscode.window.showQuickPick(traceItems, {
+			title: "Kilo Code: Run Council Review (Trace)",
+			matchOnDescription: true,
+			matchOnDetail: true,
+		})
+		if (!pickedTrace) return
+
+		try {
+			const result = await runCouncilReview({
+				projectRoot,
+				tracePath: pickedTrace.absPath,
+				resolveProfile: async (profileName) => {
+					const { name: _name, ...profile } = await visibleProvider.providerSettingsManager.getProfile({
+						name: profileName,
+					})
+					return profile
+				},
+				completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
+			})
+
+			await vscode.window.showInformationMessage(
+				`Council scorecards written: ${nodePath.relative(projectRoot, result.reportsDir)}`,
+			)
+		} catch (error) {
+			await vscode.window.showErrorMessage(
+				`Kilo Code: Failed to run council review: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+	},
+
+	generateEvolutionProposalFromScorecards: async () => {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+		if (!workspaceFolder) {
+			await vscode.window.showErrorMessage("Kilo Code: No workspace folder is open.")
+			return
+		}
+
+		const projectRoot = workspaceFolder.uri.fsPath
+		const reportsRoot = nodePath.join(projectRoot, ".kilocode", "evals", "reports")
+
+		type ReportsPickItem = vscode.QuickPickItem & { absPath: string; mtimeMs: number }
+		const reportDirs: ReportsPickItem[] = []
+
+		try {
+			const entries = await readdir(reportsRoot, { withFileTypes: true })
+			for (const ent of entries) {
+				if (!ent.isDirectory()) continue
+				const absPath = nodePath.join(reportsRoot, ent.name)
+				const s = await stat(absPath)
+				reportDirs.push({
+					label: ent.name,
+					description: nodePath.relative(projectRoot, absPath),
+					detail: new Date(s.mtimeMs).toLocaleString(),
+					absPath,
+					mtimeMs: s.mtimeMs,
+				})
+			}
+		} catch {
+			// no reports yet
+		}
+
+		if (reportDirs.length === 0) {
+			await vscode.window.showErrorMessage(
+				"Kilo Code: No council report directories found. Run 'Kilo Code: Run Council Review (Trace)' first.",
+			)
+			return
+		}
+
+		reportDirs.sort((a, b) => b.mtimeMs - a.mtimeMs)
+		const pickedReportsDir = await vscode.window.showQuickPick(reportDirs, {
+			title: "Select council reports directory",
+			matchOnDescription: true,
+			matchOnDetail: true,
+		})
+		if (!pickedReportsDir) return
+
+		let tracePath: string | undefined = undefined
+
+		// Best-effort infer trace path from first scorecard file.
+		try {
+			const files = await readdir(pickedReportsDir.absPath, { withFileTypes: true })
+			const firstJson = files.find((f) => f.isFile() && f.name.endsWith(".json"))
+			if (firstJson) {
+				const raw = await readFile(nodePath.join(pickedReportsDir.absPath, firstJson.name), "utf8")
+				const parsed = JSON.parse(raw) as any
+				const traceRef = parsed?.trace?.path
+				if (typeof traceRef === "string" && traceRef.length > 0) {
+					tracePath = nodePath.isAbsolute(traceRef) ? traceRef : nodePath.join(projectRoot, traceRef)
+				}
+			}
+		} catch {
+			// ignore
+		}
+
+		if (!tracePath) {
+			await vscode.window.showErrorMessage(
+				"Kilo Code: Could not infer trace from scorecards (missing trace.path). Please re-run council review with a trace exported from this workspace.",
+			)
+			return
+		}
+
+		try {
+			const result = await generateEvolutionProposalFromScorecardsShared({
+				projectRoot,
+				tracePath,
+				reportsDir: pickedReportsDir.absPath,
+			})
+
+			await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(result.markdownPath))
+			await vscode.window.showInformationMessage(
+				`Evolution proposal generated: ${nodePath.relative(projectRoot, result.proposalDir)}`,
+			)
+		} catch (error) {
+			await vscode.window.showErrorMessage(
+				`Kilo Code: Failed to generate proposal: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+	},
 	toggleAutoApprove: async () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
 

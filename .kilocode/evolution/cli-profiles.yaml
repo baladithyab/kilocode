@@ -1,0 +1,6 @@
+version: 1
+profiles:
+  # Maps council.yaml profile names -> CLI provider IDs (+ optional model override)
+  default:
+    providerId: default
+    # model: x-ai/grok-code-fast-1

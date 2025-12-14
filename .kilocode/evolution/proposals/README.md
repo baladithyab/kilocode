@@ -18,3 +18,13 @@ Use a monotonically increasing prefix for easy audit, e.g.
 - **Verification**: how do we know this is correct?
 
 Use [`0000-template.md`](.kilocode/evolution/proposals/0000-template.md:1) as a starting point.
+
+## Generated proposal folders (proposal.v1)
+
+The VS Code / CLI proposal generator writes **create-missing-only** folders under this directory:
+
+- `proposal.v1.<timestamp>.<traceId>/`
+    - `proposal.v1.json`
+    - `proposal.md`
+
+These are intended as an intermediate artifact you can copy/paste from into a numbered proposal file.

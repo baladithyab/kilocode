@@ -27,6 +27,13 @@ export * from "./tool.js"
 export * from "./tool-params.js"
 export * from "./type-fu.js"
 export * from "./vscode.js"
+
+// Evolution MVP shared schemas
+export * from "./trace.js"
+export * from "./scorecard.js"
+export * from "./proposal.js"
+export * from "./council.js"
+
 export * from "./kilocode/kilocode.js"
 export * from "./kilocode/device-auth.js" // kilocode_change
 export * from "./kilocode/nativeFunctionCallingProviders.js"

@@ -18,6 +18,10 @@ import { envConfigExists, getMissingEnvVars } from "./config/env-config.js"
 import { getParallelModeParams } from "./parallel/parallel.js"
 import { DEBUG_MODES, DEBUG_FUNCTIONS } from "./debug/index.js"
 import { logs } from "./services/logs.js"
+import { runEvolutionBootstrapCli } from "./evolution/bootstrap.js"
+import { runTraceExportCli } from "./trace/export.js"
+import { runCouncilRunCli } from "./council/run.js"
+import { runEvolveProposeCli } from "./evolution/propose.js"
 
 const program = new Command()
 let cli: CLI | null = null
@@ -271,6 +275,123 @@ program
 		}
 
 		await debugFunction()
+	})
+
+// Evolution Layer bootstrap
+program
+	.command("evolution")
+	.description("Evolution Layer utilities")
+	.command("bootstrap")
+	.description("Bootstrap the Evolution Layer scaffold in the current directory (create-missing-only)")
+	.action(async () => {
+		try {
+			await runEvolutionBootstrapCli({ projectRoot: process.cwd() })
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
+	})
+
+// Trace utilities
+program
+	.command("trace")
+	.description("Trace utilities")
+	.command("export")
+	.description("Export a trace.v1 JSON into .kilocode/traces/runs/")
+	.option("-w, --workspace <path>", "Workspace directory (repo root)", process.cwd())
+	.option("--task-dir <path>", "Task directory containing ui_messages.json")
+	.option("--trace <path>", "Existing trace.v1 JSON to re-export")
+	.option("--out-dir <path>", "Output directory (relative to workspace)", ".kilocode/traces/runs")
+	.option("--no-redact", "Disable basic redaction (default: redact)")
+	.action(async (options) => {
+		try {
+			const result = await runTraceExportCli({
+				workspaceRoot: options.workspace,
+				traceInputPath: options.trace,
+				taskDir: options.taskDir,
+				redact: Boolean(options.redact),
+				outDir: options.outDir,
+			})
+			console.log(result.outputPath)
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
+	})
+
+// Council utilities
+program
+	.command("council")
+	.description("Council review utilities")
+	.command("run")
+	.description("Run council review on a trace.v1")
+	.requiredOption("--trace <path>", "Path to a trace.v1 JSON (relative to --workspace)")
+	.option("-w, --workspace <path>", "Workspace directory (repo root)", process.cwd())
+	.option(
+		"--council-config <path>",
+		"Council config YAML path (relative to workspace)",
+		".kilocode/evolution/council.yaml",
+	)
+	.option(
+		"--cli-profile-map <path>",
+		"CLI profile map YAML path (relative to workspace)",
+		".kilocode/evolution/cli-profiles.yaml",
+	)
+	.option("--out-dir <path>", "Output directory (relative to workspace)", ".kilocode/evals/reports")
+	.action(async (options) => {
+		try {
+			const result = await runCouncilRunCli({
+				workspaceRoot: options.workspace,
+				tracePath: options.trace,
+				councilConfigPath: options.councilConfig,
+				cliProfileMapPath: options.cliProfileMap,
+				outDir: options.outDir,
+			})
+			console.log(result.reportsDir)
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
+	})
+
+// Evolution proposal utilities
+program
+	.command("evolve")
+	.description("Evolution proposal utilities")
+	.command("propose")
+	.description("Generate an Evolution proposal folder from a trace + scorecards")
+	.requiredOption("--trace <path>", "Path to trace.v1 JSON (relative to --workspace)")
+	.requiredOption("--reports <dir>", "Directory containing scorecard.v1 JSON files (relative to --workspace)")
+	.option("-w, --workspace <path>", "Workspace directory (repo root)", process.cwd())
+	.option("--out-dir <path>", "Output directory (relative to workspace)", ".kilocode/evolution/proposals")
+	.action(async (options) => {
+		try {
+			const result = await runEvolveProposeCli({
+				workspaceRoot: options.workspace,
+				tracePath: options.trace,
+				reportsDir: options.reports,
+				outDir: options.outDir,
+			})
+			console.log(result.proposalDir)
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
+	})
+
+// Alias: `kilocode init evolution`
+program
+	.command("init")
+	.description("Initialization helpers")
+	.command("evolution")
+	.description("Alias for `kilocode evolution bootstrap`")
+	.action(async () => {
+		try {
+			await runEvolutionBootstrapCli({ projectRoot: process.cwd() })
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
 	})
 
 // Handle process termination signals

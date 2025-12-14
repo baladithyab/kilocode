@@ -1,0 +1,11 @@
+version: 1
+councilId: evolution-mvp
+roles:
+  governance:
+    profile: default
+    rubricId: evolution.governance.v1
+    promptPath: .kilocode/evolution/council-prompts/governance.md
+  quality:
+    profile: default
+    rubricId: evolution.quality.v1
+    promptPath: .kilocode/evolution/council-prompts/quality.md

@@ -138,6 +138,7 @@ const sidebars: SidebarsConfig = {
 					type: "category",
 					label: "Advanced Context Features",
 					items: [
+						"advanced-usage/evolution-layer",
 						"advanced-usage/memory-bank",
 						"features/codebase-indexing",
 						"advanced-usage/large-projects",

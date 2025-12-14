@@ -217,6 +217,7 @@ If your custom rules aren't being properly followed:
 
 ## Related Features
 
+- [Evolution Layer](/advanced-usage/evolution-layer)
 - [Custom Modes](/docs/features/custom-modes)
 - [Custom Instructions](/advanced-usage/custom-instructions)
 - [Settings Management](/docs/features/settings-management)

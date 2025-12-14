@@ -298,6 +298,26 @@
 				"title": "Open Agent Manager",
 				"icon": "$(circuit-board)",
 				"category": "%configuration.title%"
+			},
+			{
+				"command": "kilo-code.bootstrapEvolution",
+				"title": "Kilo Code: Bootstrap Evolution Layer",
+				"category": "%configuration.title%"
+			},
+			{
+				"command": "kilo-code.exportTraceForCouncil",
+				"title": "Kilo Code: Export Trace for Council",
+				"category": "%configuration.title%"
+			},
+			{
+				"command": "kilo-code.runCouncilReviewTrace",
+				"title": "Kilo Code: Run Council Review (Trace)",
+				"category": "%configuration.title%"
+			},
+			{
+				"command": "kilo-code.generateEvolutionProposalFromScorecards",
+				"title": "Kilo Code: Generate Evolution Proposal (from scorecards)",
+				"category": "%configuration.title%"
 			}
 		],
 		"menus": {

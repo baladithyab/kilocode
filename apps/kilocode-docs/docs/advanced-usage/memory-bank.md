@@ -324,3 +324,8 @@ Testing shows that while Memory Bank uses more tokens initially, it dramatically
 ## Remember
 
 The Memory Bank is Kilo Code's only link to previous work. Its effectiveness depends entirely on maintaining clear, accurate documentation and confirming context preservation in every interaction. When you see `[Memory Bank: Active]` at the beginning of a response, you can be confident that Kilo Code has a comprehensive understanding of your project.
+
+## Related Features
+
+- [Evolution Layer](/advanced-usage/evolution-layer)
+- [Custom Rules](/advanced-usage/custom-rules)

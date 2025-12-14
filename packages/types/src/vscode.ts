@@ -72,6 +72,12 @@ export const commandIds = [
 	"handleExternalUri", // kilocode_change - for JetBrains plugin URL forwarding
 	"focusPanel",
 	"toggleAutoApprove",
+	"bootstrapEvolution",
+
+	// Evolution MVP: trace → council → proposal
+	"exportTraceForCouncil",
+	"runCouncilReviewTrace",
+	"generateEvolutionProposalFromScorecards",
 ] as const
 
 export type CommandId = (typeof commandIds)[number]
