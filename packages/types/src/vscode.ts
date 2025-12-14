@@ -78,6 +78,14 @@ export const commandIds = [
 	"exportTraceForCouncil",
 	"runCouncilReviewTrace",
 	"generateEvolutionProposalFromScorecards",
+
+	// Evolution: UX entry points
+	"evolutionQuickActions",
+	"evolutionOpenLatestArtifact",
+
+	// Evolution Mode Map Sync
+	"syncEvolutionModeMapPreview",
+	"syncEvolutionModeMapApply",
 ] as const
 
 export type CommandId = (typeof commandIds)[number]

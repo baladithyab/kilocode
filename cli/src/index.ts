@@ -6,6 +6,7 @@ loadEnvFile()
 
 import { Command } from "commander"
 import { existsSync } from "fs"
+import path from "path"
 import { CLI } from "./cli.js"
 import { DEFAULT_MODES, getAllModes } from "./constants/modes/defaults.js"
 import { getTelemetryService } from "./services/telemetry/index.js"
@@ -19,6 +20,8 @@ import { getParallelModeParams } from "./parallel/parallel.js"
 import { DEBUG_MODES, DEBUG_FUNCTIONS } from "./debug/index.js"
 import { logs } from "./services/logs.js"
 import { runEvolutionBootstrapCli } from "./evolution/bootstrap.js"
+import { runEvolutionModeMapSyncCli } from "./evolution/mode-map-sync.js"
+import { runEvolutionOpenCli } from "./evolution/open.js"
 import { runTraceExportCli } from "./trace/export.js"
 import { runCouncilRunCli } from "./council/run.js"
 import { runEvolveProposeCli } from "./evolution/propose.js"
@@ -277,15 +280,65 @@ program
 		await debugFunction()
 	})
 
-// Evolution Layer bootstrap
-program
-	.command("evolution")
-	.description("Evolution Layer utilities")
+// Evolution Layer utilities
+const evolution = program.command("evolution").description("Evolution Layer utilities")
+
+// Bootstrap
+// (create-missing-only)
+evolution
 	.command("bootstrap")
 	.description("Bootstrap the Evolution Layer scaffold in the current directory (create-missing-only)")
 	.action(async () => {
 		try {
 			await runEvolutionBootstrapCli({ projectRoot: process.cwd() })
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
+	})
+
+// Mode Map Sync
+// Source of truth: docs/llm-mode-map.yaml
+// Target: .kilocode/evolution/council.yaml
+// Produces rollback-friendly artifacts in .kilocode/evolution/proposals/
+evolution
+	.command("mode-map")
+	.description("Evolution mode map utilities")
+	.command("sync")
+	.description("Sync Evolution Mode Map (council.yaml profiles)")
+	.option("-w, --workspace <path>", "Workspace directory (repo root)", process.cwd())
+	.option("--dry-run", "Preview changes (default)", true)
+	.option("--apply", "Apply changes to .kilocode/evolution/council.yaml", false)
+	.option(
+		"--cli-profile-map <path>",
+		"CLI profile map YAML path (relative to workspace)",
+		".kilocode/evolution/cli-profiles.yaml",
+	)
+	.option("--no-write-proposal", "Do not write proposal artifacts under .kilocode/evolution/proposals/")
+	.action(async (options) => {
+		try {
+			await runEvolutionModeMapSyncCli({
+				workspaceRoot: options.workspace,
+				apply: Boolean(options.apply),
+				dryRun: Boolean(options.dryRun),
+				writeProposal: Boolean(options.writeProposal),
+				cliProfileMapPath: options.cliProfileMap,
+			})
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error))
+			process.exit(1)
+		}
+	})
+
+// Discoverability: show latest evolution artifacts in this repo.
+// (Print paths only; does not OS-open.)
+evolution
+	.command("open")
+	.description("Print paths to latest Evolution artifacts (trace/report/proposal)")
+	.option("-w, --workspace <path>", "Workspace directory (repo root)", process.cwd())
+	.action(async (options) => {
+		try {
+			await runEvolutionOpenCli({ workspaceRoot: options.workspace })
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)
@@ -313,6 +366,13 @@ program
 				outDir: options.outDir,
 			})
 			console.log(result.outputPath)
+
+			const absWorkspace = path.resolve(options.workspace)
+			const relTrace = path.relative(absWorkspace, result.outputPath).split(path.sep).join("/")
+
+			console.log("\nNext steps")
+			console.log(`- Run council: kilocode council run --workspace ${options.workspace} --trace ${relTrace}`)
+			console.log(`- Preview latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)
@@ -348,6 +408,15 @@ program
 				outDir: options.outDir,
 			})
 			console.log(result.reportsDir)
+
+			const absWorkspace = path.resolve(options.workspace)
+			const relReports = path.relative(absWorkspace, result.reportsDir).split(path.sep).join("/")
+
+			console.log("\nNext steps")
+			console.log(
+				`- Generate proposal: kilocode evolve propose --workspace ${options.workspace} --trace ${options.trace} --reports ${relReports}`,
+			)
+			console.log(`- Preview latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)
@@ -373,6 +442,15 @@ program
 				outDir: options.outDir,
 			})
 			console.log(result.proposalDir)
+
+			const absWorkspace = path.resolve(options.workspace)
+			const relProposalDir = path.relative(absWorkspace, result.proposalDir).split(path.sep).join("/")
+			const relProposalMd = path.relative(absWorkspace, result.markdownPath).split(path.sep).join("/")
+
+			console.log("\nNext steps")
+			console.log(`- Proposal directory: ${relProposalDir}`)
+			console.log(`- Review proposal markdown: ${relProposalMd}`)
+			console.log(`- Preview latest artifacts: kilocode evolution open --workspace ${options.workspace}`)
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error))
 			process.exit(1)

@@ -1,0 +1,40 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`mode map sync > create-missing: generates a minimal council.yaml and diff when council.yaml is absent 1`] = `
+"===================================================================
+--- a/.kilocode/evolution/council.yaml	
++++ b/.kilocode/evolution/council.yaml	
+@@ -0,0 +1,11 @@
++version: 1
++councilId: evolution-mvp
++roles:
++  governance:
++    profile: default
++    rubricId: evolution.governance.v1
++    promptPath: .kilocode/evolution/council-prompts/governance.md
++  quality:
++    profile: default
++    rubricId: evolution.quality.v1
++    promptPath: .kilocode/evolution/council-prompts/quality.md
+"
+`;
+
+exports[`mode map sync > detects drift and generates a deterministic unified diff 1`] = `
+"===================================================================
+--- a/.kilocode/evolution/council.yaml	
++++ b/.kilocode/evolution/council.yaml	
+@@ -2,10 +2,10 @@
+ councilId: evolution-mvp
+ roles:
+   governance:
+-    profile: default
++    profile: context-manager
+     rubricId: evolution.governance.v1
+     promptPath: .kilocode/evolution/council-prompts/governance.md
+   quality:
+-    profile: default
++    profile: eval-engineer
+     rubricId: evolution.quality.v1
+     promptPath: .kilocode/evolution/council-prompts/quality.md
+"
+`;

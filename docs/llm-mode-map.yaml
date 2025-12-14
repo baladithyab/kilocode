@@ -29,6 +29,16 @@ evolution_layer:
     - pnpm-lock.yaml
     - turbo.json
 
+council:
+  roles:
+    # Profile names are resolved differently by environment:
+    # - VS Code: ProviderSettingsManager profile name
+    # - CLI: mapped via .kilocode/evolution/cli-profiles.yaml
+    governance:
+      profile: default
+    quality:
+      profile: default
+
 modes:
   context-manager:
     primary_tasks:

@@ -232,6 +232,35 @@ export class ClineProvider
 					SessionManager.init()?.doSync(true)
 				})
 
+				// Optional, opt-in UX nudge for Evolution workflows (never blocks).
+				try {
+					const enabled = vscode.workspace
+						.getConfiguration(Package.name)
+						.get<boolean>("evolution.nudges.postTask", false)
+
+					// Default: only show for successful top-level tasks.
+					if (enabled && !instance.parentTaskId) {
+						void vscode.window
+							.showInformationMessage(
+								"Kilo Code: Evolution: Post-task actions",
+								"Export Trace",
+								"Run Council",
+								"Dismiss",
+							)
+							.then(async (choice) => {
+								if (choice === "Export Trace") {
+									await vscode.commands.executeCommand(`${Package.name}.exportTraceForCouncil`)
+								} else if (choice === "Run Council") {
+									await vscode.commands.executeCommand(`${Package.name}.runCouncilReviewTrace`)
+								}
+							})
+					}
+				} catch (error) {
+					this.log(
+						`[evolution nudge] Failed to show post-task nudge: ${error instanceof Error ? error.message : String(error)}`,
+					)
+				}
+
 				return this.emit(RooCodeEventName.TaskCompleted, taskId, tokenUsage, toolUsage)
 			}
 			const onTaskAborted = async () => {

@@ -25,6 +25,15 @@ export type CouncilRunCliArgs = {
 	outDir?: string
 }
 
+function logEvent(event: {
+	event: string
+	phase: "start" | "end" | "error"
+	ts: string
+	data?: Record<string, unknown>
+}): void {
+	console.log(JSON.stringify(event))
+}
+
 async function loadCliProfileMap(absPath: string): Promise<CliProfileMap> {
 	const raw = await fs.readFile(absPath, "utf8")
 	return cliProfileMapSchema.parse(YAML.parse(raw))
@@ -104,31 +113,68 @@ export async function runCouncilRunCli(
 	const absCouncilConfigPath = path.resolve(absWorkspace, councilConfigPath)
 	const absCliProfileMapPath = path.resolve(absWorkspace, cliProfileMapPath)
 
-	const [profileMap, { config }] = await Promise.all([loadCliProfileMap(absCliProfileMapPath), loadConfig()])
-
-	const resolveProfile = async (profileName: string): Promise<ProviderSettings> => {
-		const entry = resolveCliProfileEntry(profileMap, profileName)
-		const provider = config.providers.find((p) => p.id === entry.providerId)
-		if (!provider) {
-			throw new Error(
-				`Provider id '${entry.providerId}' referenced by CLI profile '${profileName}' was not found in CLI config (${config.providers.map((p) => p.id).join(", ")}).`,
-			)
-		}
-
-		const base = providerConfigToProviderSettings(provider)
-		return applyModelOverride(base, entry.model)
-	}
-
-	const result = await runCouncilReview({
-		projectRoot: absWorkspace,
-		tracePath: absTracePath,
-		councilConfigPath: toPosixRel(absWorkspace, absCouncilConfigPath),
-		outDir,
-		resolveProfile,
-		completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
+	logEvent({
+		event: "evolution.council.run",
+		phase: "start",
+		ts: new Date().toISOString(),
+		data: {
+			workspaceRoot: absWorkspace,
+			tracePath: toPosixRel(absWorkspace, absTracePath),
+			councilConfigPath: toPosixRel(absWorkspace, absCouncilConfigPath),
+			cliProfileMapPath: toPosixRel(absWorkspace, absCliProfileMapPath),
+			outDir,
+		},
 	})
 
-	return { reportsDir: result.reportsDir, scorecardPaths: result.scorecardPaths }
+	try {
+		const [profileMap, { config }] = await Promise.all([loadCliProfileMap(absCliProfileMapPath), loadConfig()])
+
+		const resolveProfile = async (profileName: string): Promise<ProviderSettings> => {
+			const entry = resolveCliProfileEntry(profileMap, profileName)
+			const provider = config.providers.find((p) => p.id === entry.providerId)
+			if (!provider) {
+				throw new Error(
+					`Provider id '${entry.providerId}' referenced by CLI profile '${profileName}' was not found in CLI config (${config.providers.map((p) => p.id).join(", ")}).`,
+				)
+			}
+
+			const base = providerConfigToProviderSettings(provider)
+			return applyModelOverride(base, entry.model)
+		}
+
+		const result = await runCouncilReview({
+			projectRoot: absWorkspace,
+			tracePath: absTracePath,
+			councilConfigPath: toPosixRel(absWorkspace, absCouncilConfigPath),
+			outDir,
+			resolveProfile,
+			completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
+		})
+
+		logEvent({
+			event: "evolution.council.run",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				reportsDir: toPosixRel(absWorkspace, result.reportsDir),
+				scorecards: result.scorecardPaths.length,
+			},
+		})
+
+		return { reportsDir: result.reportsDir, scorecardPaths: result.scorecardPaths }
+	} catch (error) {
+		logEvent({
+			event: "evolution.council.run",
+			phase: "error",
+			ts: new Date().toISOString(),
+			data: {
+				error: error instanceof Error ? error.message : String(error),
+				recovery:
+					"Ensure .kilocode/evolution/council.yaml and .kilocode/evolution/cli-profiles.yaml exist and reference valid provider IDs. Then re-run with --trace pointing at a valid trace.v1.json.",
+			},
+		})
+		throw error
+	}
 }
 
 function toPosixRel(root: string, abs: string): string {
