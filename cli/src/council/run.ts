@@ -31,7 +31,7 @@ async function loadCliProfileMap(absPath: string): Promise<CliProfileMap> {
 }
 
 function providerConfigToProviderSettings(provider: ProviderConfig): ProviderSettings {
-	const { provider: providerName, ...rest } = provider as any
+	const { provider: providerName, ...rest } = provider
 	return providerSettingsSchema.parse({ apiProvider: providerName, ...rest })
 }
 
