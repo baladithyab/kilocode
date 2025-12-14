@@ -50,6 +50,10 @@ logs
 .vercel
 .roo/mcp.json
 
+# Evolution Layer generated artifacts (keep committed governance artifacts tracked)
+.kilocode/traces/runs/
+.kilocode/evals/runs/
+
 # Nix / Direnv
 .direnv
 

@@ -1,0 +1,57 @@
+version: 1
+purpose: >-
+  Map common task types to recommended Kilo Code modes and encode MVP1 Evolution Layer
+  write-scope constraints.
+
+evolution_layer:
+  principles:
+    - local-first
+    - propose-and-apply
+    - auditability
+    - least-privilege
+
+  allowed_write_scope:
+    - .kilocode/memory/**
+    - .kilocode/skills/**
+    - .kilocode/rubrics/**
+    - .kilocode/evolution/**
+    - .kilocode/rules/**
+    - .kilocode/mcp.json
+    - docs/**
+
+  forbidden_write_scope:
+    - src/**
+    - packages/**
+    - apps/**
+    - webview-ui/**
+    - .github/**
+    - package.json
+    - pnpm-lock.yaml
+    - turbo.json
+
+modes:
+  context-manager:
+    primary_tasks:
+      - maintain project memory
+      - curate and refactor skills/playbooks
+      - author evolution proposals and applied records
+      - update governance documentation
+    write_scope: evolution_layer.allowed_write_scope
+
+  eval-engineer:
+    primary_tasks:
+      - define rubrics
+      - create eval definitions/templates
+      - define trace schemas/templates
+      - run evals locally (outputs go to ignored runs/ folders)
+    write_scope: evolution_layer.allowed_write_scope
+
+routing:
+  - when: "task is about repo-local memory, skills, or governance"
+    use: context-manager
+  - when: "task is about scoring, evals, traces, measurement"
+    use: eval-engineer
+  - when: "task is about translations under src/i18n/locales or src/package.nls*.json"
+    use: translate
+  - when: "task is about tests"
+    use: test
