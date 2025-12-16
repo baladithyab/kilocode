@@ -3,6 +3,8 @@ import { readdir, readFile, stat } from "node:fs/promises"
 import * as nodePath from "node:path"
 
 import { createABTestService, type ABTestService } from "../../services/evolution/ABTestService"
+import { EvolutionWebviewHandler } from "../../services/evolution/EvolutionWebviewHandler"
+import { ProposalApplicationService } from "../../services/evolution/ProposalApplicationService"
 import {
 	type ABTestVariantConfig,
 	type ABTestResult,
@@ -291,6 +293,146 @@ function loadAutomationConfig(): EvolutionAutomationConfig {
 	}
 }
 
+async function refreshEvolutionWebviewState(provider: ClineProvider, projectRoot: string): Promise<void> {
+	try {
+		await new EvolutionWebviewHandler({ provider, projectRoot }).handle({ type: "evolution.requestState" } as any)
+	} catch {
+		// best-effort; ignore
+	}
+}
+
+async function handleGeneratedEvolutionProposal(args: {
+	projectRoot: string
+	proposalDirAbs: string
+	proposalMarkdownAbsPath?: string
+	provider?: ClineProvider
+	outputChannel: vscode.OutputChannel
+	triggerLabel: string
+	automationLevel: AutomationLevel
+}): Promise<void> {
+	const {
+		projectRoot,
+		proposalDirAbs,
+		proposalMarkdownAbsPath,
+		provider,
+		outputChannel,
+		triggerLabel,
+		automationLevel,
+	} = args
+
+	const service = new ProposalApplicationService({ projectRoot })
+	let parsed: Awaited<ReturnType<ProposalApplicationService["parseProposal"]>>
+	try {
+		parsed = await service.parseProposal(proposalDirAbs)
+	} catch (error) {
+		outputChannel.appendLine(
+			`[evolution] Failed to parse proposal for ${triggerLabel}: ${error instanceof Error ? error.message : String(error)}`,
+		)
+		return
+	}
+
+	let canAuto = false
+	let canApplyWithApproval = false
+	try {
+		canAuto = await service.canAutoApply(parsed)
+		canApplyWithApproval = await service.canApplyWithApproval(parsed)
+	} catch (error) {
+		outputChannel.appendLine(
+			`[evolution] Failed eligibility checks for ${triggerLabel}: ${error instanceof Error ? error.message : String(error)}`,
+		)
+		return
+	}
+
+	const openProposal = async () => {
+		if (proposalMarkdownAbsPath) {
+			await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(proposalMarkdownAbsPath))
+		} else {
+			await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(proposalDirAbs))
+		}
+	}
+
+	const maybeRefresh = async () => {
+		if (provider) {
+			await refreshEvolutionWebviewState(provider, projectRoot)
+		}
+	}
+
+	// Level 2+ and safe: auto-apply immediately.
+	if (automationLevel >= AutomationLevel.AutoApplyLowRisk && canAuto) {
+		outputChannel.appendLine(`[evolution] Auto-applying low-risk proposal (${triggerLabel})...`)
+		const result = await service.applyProposal(parsed)
+		if (result.applied) {
+			outputChannel.appendLine(
+				`[evolution] Proposal applied (${triggerLabel}). Record: ${result.appliedRecordId ?? "(unknown)"}`,
+			)
+			if (provider) {
+				await provider.postMessageToWebview({
+					type: "evolution.actionResult",
+					success: true,
+					data: {
+						action: "proposalApplied",
+						recordId: result.appliedRecordId,
+						changedFiles: result.changedFiles,
+					},
+				} as any)
+				await maybeRefresh()
+			}
+			return
+		}
+
+		outputChannel.appendLine(
+			`[evolution] Auto-apply failed (${triggerLabel}): ${(result.errors ?? []).join("; ") || "unknown error"}`,
+		)
+		await maybeRefresh()
+		return
+	}
+
+	// Level 1 and safe: ask for explicit approval.
+	if (automationLevel >= AutomationLevel.AutoTrigger && canApplyWithApproval) {
+		const choice = await vscode.window.showInformationMessage(
+			"Kilo Code: Evolution: A low-risk proposal is ready to apply.",
+			"Apply",
+			"Open Proposal",
+			"Dismiss",
+		)
+		if (choice === "Open Proposal") {
+			await openProposal()
+			return
+		}
+		if (choice !== "Apply") {
+			return
+		}
+
+		const result = await service.applyProposal(parsed)
+		if (result.applied) {
+			await vscode.window.showInformationMessage(
+				`Kilo Code: Evolution: Proposal applied. Record: ${result.appliedRecordId ?? "(unknown)"}`,
+			)
+			if (provider) {
+				await provider.postMessageToWebview({
+					type: "evolution.actionResult",
+					success: true,
+					data: {
+						action: "proposalApplied",
+						recordId: result.appliedRecordId,
+						changedFiles: result.changedFiles,
+					},
+				} as any)
+				await maybeRefresh()
+			}
+		} else {
+			await vscode.window.showErrorMessage(
+				`Kilo Code: Evolution: Failed to apply proposal: ${(result.errors ?? []).join("; ") || "unknown error"}`,
+			)
+			await maybeRefresh()
+		}
+		return
+	}
+
+	// Otherwise: do nothing automatically.
+	await maybeRefresh()
+}
+
 /**
  * Run council review for automation (silent version without user prompts)
  */
@@ -514,6 +656,16 @@ async function handleEvolutionAutomation(args: {
 				proposalDir: nodePath.relative(projectRoot, proposalResult.proposalDir),
 				markdownPath: nodePath.relative(projectRoot, proposalResult.markdownPath),
 			},
+		})
+
+		await handleGeneratedEvolutionProposal({
+			projectRoot,
+			proposalDirAbs: proposalResult.proposalDir,
+			proposalMarkdownAbsPath: proposalResult.markdownPath,
+			provider,
+			outputChannel: evolutionOutputChannel,
+			triggerLabel: `automation:${triggerResult.reason}`,
+			automationLevel: automationConfig.level,
 		})
 
 		// Update rate limit state
@@ -1356,6 +1508,17 @@ export function getEvolutionCommandsMap(options: RegisterCommandOptions): Record
 				)
 
 				await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(result.markdownPath))
+
+				const automationLevel = loadAutomationConfig().level
+				await handleGeneratedEvolutionProposal({
+					projectRoot,
+					proposalDirAbs: result.proposalDir,
+					proposalMarkdownAbsPath: result.markdownPath,
+					provider,
+					outputChannel: evoChannel,
+					triggerLabel: "manual:generateEvolutionProposalFromScorecards",
+					automationLevel,
+				})
 
 				const choice = await vscode.window.showInformationMessage(
 					`Evolution proposal generated: ${relProposalDir}. Open latest artifacts: Kilo Code: Evolution: Open Latest Artifact…`,

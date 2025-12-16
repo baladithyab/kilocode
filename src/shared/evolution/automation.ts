@@ -349,6 +349,7 @@ export function evaluateAutoApply(
  */
 export const ALWAYS_REQUIRE_APPROVAL_PATTERNS = [
 	/\.kilocode\/evolution\/council\.yaml$/i,
+	/\.kilocode\/evolution\/config\.yaml$/i,
 	/\.kilocode\/rules\/rules\.md$/i,
 	/\.kilocode\/rules\/.*\.md$/i,
 	/package\.json$/i,

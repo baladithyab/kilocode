@@ -136,7 +136,7 @@ export async function runCouncilReview(options: CouncilRunOptions): Promise<Coun
 		const prompt = fillCouncilPromptTemplate(promptTemplate, {
 			role,
 			profile: roleConfig.profile,
-			rubricId: roleConfig.rubricId,
+			...(roleConfig.rubricId ? { rubricId: roleConfig.rubricId } : {}),
 			promptPath: roleConfig.promptPath,
 			tracePath: tracePathRel,
 			trace,

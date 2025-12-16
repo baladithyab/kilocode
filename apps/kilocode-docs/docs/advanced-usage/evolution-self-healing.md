@@ -8,6 +8,14 @@ description: Understand how Kilo Code detects and fixes degradation automaticall
 
 **Self-Healing** is the safety net of the Evolution Layer. It ensures that if an automated change (or even a manual one) causes Kilo Code's performance to degrade, the system can detect it and revert to a known good state.
 
+## Monitoring Health
+
+You can monitor the health of your Evolution Layer in the **Evolution Settings Panel**.
+
+1.  Go to **Settings > Evolution**.
+2.  Look at the **Status Dashboard**.
+3.  The **Self-Healing** indicator will show "Active" if the system is monitoring performance, and will list any recent healing events (e.g., "Reverted change to system prompt due to 15% drop in success rate").
+
 ## How It Works
 
 Self-healing relies on continuous monitoring of **Evaluation Metrics**.
@@ -44,7 +52,9 @@ ls -l .kilocode/evolution/applied/ | grep "rollback"
 
 ## Configuration
 
-Self-healing is active by default in **Automation Level 3**, but can be configured in lower levels via settings.
+Self-healing is active by default in **Automation Level 3**.
+
+You can also manually toggle it in the **Evolution Settings Panel** or configure it via `settings.json`:
 
 ```json
 {

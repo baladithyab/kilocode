@@ -14,7 +14,7 @@ import {
 import type { ProviderConfig } from "../config/types.js"
 import { loadConfig } from "../config/persistence.js"
 
-import { singleCompletionHandler } from "../../../src/utils/single-completion-handler.js"
+import { createExtensionService } from "../services/extension.js"
 import { runCouncilReview } from "../../../src/shared/evolution/councilRunner.js"
 
 export type CouncilRunCliArgs = {
@@ -148,26 +148,36 @@ export async function runCouncilRunCli(
 			return applyModelOverride(base, entry.model)
 		}
 
-		const result = await runCouncilReview({
-			projectRoot: absWorkspace,
-			tracePath: absTracePath,
-			councilConfigPath: toPosixRel(absWorkspace, absCouncilConfigPath),
-			outDir,
-			resolveProfile,
-			completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
-		})
+		const extensionService = createExtensionService({ workspace: absWorkspace, mode: "code" })
+		await extensionService.initialize()
+		// Ensure messages can flow immediately (avoids IPC queue/race conditions).
+		extensionService.getExtensionHost().markWebviewReady()
 
-		logEvent(verbose, {
-			event: "evolution.council.run",
-			phase: "end",
-			ts: new Date().toISOString(),
-			data: {
-				reportsDir: toPosixRel(absWorkspace, result.reportsDir),
-				scorecards: result.scorecardPaths.length,
-			},
-		})
+		try {
+			const result = await runCouncilReview({
+				projectRoot: absWorkspace,
+				tracePath: absTracePath,
+				councilConfigPath: toPosixRel(absWorkspace, absCouncilConfigPath),
+				outDir,
+				resolveProfile,
+				completePrompt: async (settings, prompt) =>
+					await extensionService.requestSingleCompletion(prompt, { apiConfiguration: settings }),
+			})
 
-		return { reportsDir: result.reportsDir, scorecardPaths: result.scorecardPaths }
+			logEvent(verbose, {
+				event: "evolution.council.run",
+				phase: "end",
+				ts: new Date().toISOString(),
+				data: {
+					reportsDir: toPosixRel(absWorkspace, result.reportsDir),
+					scorecards: result.scorecardPaths.length,
+				},
+			})
+
+			return { reportsDir: result.reportsDir, scorecardPaths: result.scorecardPaths }
+		} finally {
+			await extensionService.dispose()
+		}
 	} catch (error) {
 		logEvent(verbose, {
 			event: "evolution.council.run",

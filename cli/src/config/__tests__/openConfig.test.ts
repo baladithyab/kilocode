@@ -7,14 +7,29 @@ import { EventEmitter } from "events"
 
 // Mock dependencies
 vi.mock("child_process")
-vi.mock("os")
-vi.mock("../index.js", () => ({
-	ensureConfigDir: vi.fn(),
-	configExists: vi.fn(),
-	saveConfig: vi.fn(),
-	getConfigPath: vi.fn(),
-	DEFAULT_CONFIG: {},
-}))
+
+// Preserve `homedir()` for config persistence module initialization, but mock `platform()` for tests.
+vi.mock("os", async () => {
+	const actual = await vi.importActual<typeof import("os")>("os")
+	return {
+		...actual,
+		platform: vi.fn(),
+	}
+})
+
+// Partially mock config exports while preserving the full module export surface.
+// This avoids missing-export errors in other tests that import additional config helpers.
+vi.mock("../index.js", async () => {
+	const actual = await vi.importActual<typeof import("../index.js")>("../index.js")
+	return {
+		...actual,
+		ensureConfigDir: vi.fn(),
+		configExists: vi.fn(),
+		saveConfig: vi.fn(),
+		// openConfig.ts `await`s this, so tests use mockResolvedValue
+		getConfigPath: vi.fn(),
+	}
+})
 
 describe("openConfigFile", () => {
 	const mockConfigPath = "/home/user/.config/kilocode/config.json"

@@ -1,7 +1,7 @@
 import path from "path"
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { ExtensionService } from "../extension.js"
-import type { ExtensionMessage, WebviewMessage } from "../../types/messages.js"
+import type { ExtensionMessage, WebviewMessage, ProviderSettings } from "../../types/messages.js"
 
 // Mock the extension-paths module
 vi.mock("../../utils/extension-paths.js", () => ({
@@ -430,6 +430,49 @@ describe("ExtensionService - requestSingleCompletion", () => {
 			const specialPrompt = "Test with\nnewlines\tand\ttabs and 'quotes'"
 			const result = await service.requestSingleCompletion(specialPrompt)
 			expect(result).toBe("result")
+		})
+
+		it("should include apiConfiguration when provided", async () => {
+			service = new ExtensionService({
+				extensionBundlePath: "/mock/extension/dist/extension.js",
+				extensionRootPath: "/mock/extension",
+			})
+
+			await service.initialize()
+			service.getExtensionHost().markWebviewReady()
+
+			let capturedRequestId: string | undefined
+			let capturedApiConfiguration: unknown
+			const originalSend = service.sendWebviewMessage.bind(service)
+			vi.spyOn(service, "sendWebviewMessage").mockImplementation(async (msg: WebviewMessage) => {
+				if (msg.type === "singleCompletion" && "completionRequestId" in msg) {
+					capturedRequestId = msg.completionRequestId as string
+					capturedApiConfiguration = (msg as WebviewMessage & { apiConfiguration?: unknown }).apiConfiguration
+					setTimeout(() => {
+						service.emit("message", {
+							type: "singleCompletionResult",
+							completionRequestId: capturedRequestId,
+							completionText: "result",
+							success: true,
+						} as ExtensionMessage)
+					}, 10)
+				}
+				return originalSend(msg)
+			})
+
+			await service.requestSingleCompletion("test", {
+				apiConfiguration: {
+					apiProvider: "kilocode",
+					kilocodeToken: "test-token",
+					kilocodeModel: "anthropic/claude-sonnet-4",
+				} as ProviderSettings,
+			})
+
+			expect(capturedApiConfiguration).toEqual({
+				apiProvider: "kilocode",
+				kilocodeToken: "test-token",
+				kilocodeModel: "anthropic/claude-sonnet-4",
+			})
 		})
 
 		it("should cleanup listeners on successful completion", async () => {

@@ -81,6 +81,36 @@ describe("webviewMessageHandler - singleCompletion", () => {
 			})
 		})
 
+		it("should prefer message apiConfiguration when provided", async () => {
+			const completionRequestId = "test-request-config-override"
+			const promptText = "Summarize this"
+			const expectedResult = "summary"
+			const overrideConfig = {
+				apiProvider: "kilocode",
+				kilocodeToken: "test-token",
+				kilocodeModel: "anthropic/claude-sonnet-4",
+			}
+
+			mockSingleCompletionHandler.mockResolvedValue(expectedResult)
+
+			await webviewMessageHandler(mockClineProvider, {
+				type: "singleCompletion",
+				text: promptText,
+				completionRequestId,
+				apiConfiguration: overrideConfig as any,
+			})
+
+			expect(mockSingleCompletionHandler).toHaveBeenCalledWith(
+				expect.objectContaining({
+					apiProvider: "kilocode",
+					kilocodeToken: "test-token",
+					kilocodeModel: "anthropic/claude-sonnet-4",
+				}),
+				promptText,
+			)
+			expect(mockClineProvider.getState).not.toHaveBeenCalled()
+		})
+
 		it("should handle empty completion result", async () => {
 			const completionRequestId = "test-request-789"
 			const promptText = "Generate nothing"

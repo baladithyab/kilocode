@@ -8,6 +8,16 @@ description: Understand how Kilo Code routes tasks and enforces rules dynamicall
 
 The **Policy Engine** is the brain of the Evolution Layer. It determines how Kilo Code handles different types of tasks, which tools it can use, and what rules it must follow. Unlike static instructions, the Policy Engine is dynamic and can evolve over time.
 
+## Managing Policies
+
+If your version of Kilo Code includes policy visibility in the **Evolution Settings Panel**, you can use it to inspect which policies are active.
+
+1.  Go to **Settings > Evolution**.
+2.  Look for a **Policy Engine** (or **Policies**) section.
+3.  Review the currently active routing rules and constraints.
+
+⚠️ Note: Full visual editing of policies is a planned enhancement. For now, policy changes are typically made by editing the underlying YAML files.
+
 ## How It Works
 
 When you give Kilo Code a task, the Policy Engine analyzes it against a set of active policies.

@@ -3,11 +3,17 @@ import { createStore } from "jotai"
 import { loadConfigAtom, configAtom, configValidationAtom } from "../config.js"
 import * as persistence from "../../../config/persistence.js"
 
-// Mock the persistence module
-vi.mock("../../../config/persistence.js", () => ({
-	loadConfig: vi.fn(),
-	saveConfig: vi.fn(),
-}))
+// Mock the persistence module (partial) so other tests can still access helper exports.
+vi.mock("../../../config/persistence.js", async () => {
+	const actual = await vi.importActual<typeof import("../../../config/persistence.js")>(
+		"../../../config/persistence.js",
+	)
+	return {
+		...actual,
+		loadConfig: vi.fn(),
+		saveConfig: vi.fn(),
+	}
+})
 
 describe("loadConfigAtom", () => {
 	beforeEach(() => {

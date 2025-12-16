@@ -142,6 +142,7 @@ const sidebars: SidebarsConfig = {
 							type: "category",
 							label: "Evolution Layer",
 							items: [
+								"advanced-usage/evolution-quick-start",
 								"advanced-usage/evolution-layer",
 								"advanced-usage/evolution-automation",
 								"advanced-usage/evolution-policy-engine",

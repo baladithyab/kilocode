@@ -108,17 +108,6 @@ describe("/theme command", () => {
 			},
 		}
 
-		// Mock config loading
-		vi.doMock("../../config/persistence.js", () => ({
-			loadConfig: vi.fn().mockResolvedValue({
-				config: {
-					customThemes: {
-						"custom-theme": mockTheme,
-					},
-				},
-			}),
-		}))
-
 		// Mock the constants/themes/index.js functions
 		vi.doMock("../../constants/themes/index.js", () => ({
 			getAvailableThemes: vi.fn(() => [

@@ -1,4 +1,6 @@
 import { EventEmitter } from "events"
+import type { ProviderSettings } from "@roo-code/types"
+
 import { createExtensionHost, ExtensionHost, ExtensionAPI, type ExtensionHostOptions } from "../host/ExtensionHost.js"
 import { createMessageBridge, MessageBridge } from "../communication/ipc.js"
 import { logs } from "./logs.js"
@@ -268,10 +270,20 @@ export class ExtensionService extends EventEmitter {
 	 * @param timeoutMs - Request timeout in milliseconds (default: 60000)
 	 * @returns Promise resolving to the completed text
 	 */
-	async requestSingleCompletion(prompt: string, timeoutMs: number = 60000): Promise<string> {
+	async requestSingleCompletion(
+		prompt: string,
+		timeoutOrOptions: number | { timeoutMs?: number; apiConfiguration?: ProviderSettings } = 60000,
+	): Promise<string> {
 		if (!this.isReady()) {
 			throw new Error("ExtensionService not ready")
 		}
+
+		const timeoutMs =
+			typeof timeoutOrOptions === "number" ? timeoutOrOptions : (timeoutOrOptions.timeoutMs ?? 60000)
+		const apiConfiguration =
+			typeof timeoutOrOptions === "number"
+				? undefined
+				: (timeoutOrOptions.apiConfiguration as ProviderSettings | undefined)
 
 		const completionRequestId = crypto.randomUUID()
 
@@ -305,6 +317,7 @@ export class ExtensionService extends EventEmitter {
 				type: "singleCompletion",
 				text: prompt,
 				completionRequestId,
+				...(apiConfiguration ? { apiConfiguration } : {}),
 			}).catch((error) => {
 				clearTimeout(timeoutId)
 				this.off("message", messageHandler)

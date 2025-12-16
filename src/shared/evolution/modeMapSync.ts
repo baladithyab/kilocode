@@ -228,7 +228,7 @@ function applyProfileMappingToCouncilConfig({
 	const changes: ModeMapSyncRoleChange[] = []
 
 	for (const role of managedRoles) {
-		const desired = desiredProfiles[role]
+		const desired = desiredProfiles[role]!
 		const current = base.roles[role]
 		if (!current) {
 			const generated = defaultRoleConfig(role, desired)
@@ -441,7 +441,7 @@ export async function applyModeMapSync({
 		return {
 			councilConfigPath: path.resolve(plan.projectRoot, plan.councilConfigPath),
 			changed: false,
-			proposal: proposalResult,
+			...(proposalResult ? { proposal: proposalResult } : {}),
 		}
 	}
 
@@ -453,6 +453,6 @@ export async function applyModeMapSync({
 	return {
 		councilConfigPath: absCouncil,
 		changed: true,
-		proposal: proposalResult,
+		...(proposalResult ? { proposal: proposalResult } : {}),
 	}
 }

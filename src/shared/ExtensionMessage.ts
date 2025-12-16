@@ -195,6 +195,8 @@ export interface ExtensionMessage {
 		| "deviceAuthFailed" // kilocode_change: Device auth failed
 		| "deviceAuthCancelled" // kilocode_change: Device auth cancelled
 		| "chatCompletionResult" // kilocode_change: FIM completion result for chat text area
+		| "evolution.state"
+		| "evolution.actionResult"
 	text?: string
 	// kilocode_change start
 	completionRequestId?: string // Correlation ID from request
@@ -269,6 +271,7 @@ export interface ExtensionMessage {
 	slug?: string
 	success?: boolean
 	values?: Record<string, any>
+	data?: any
 	sessionId?: string // kilocode_change: STT session ID
 	segments?: STTSegment[] // kilocode_change: STT transcript segments (complete state)
 	isFinal?: boolean // kilocode_change: STT transcript is final

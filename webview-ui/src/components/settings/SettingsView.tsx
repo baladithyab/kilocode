@@ -25,6 +25,7 @@ import {
 	MessageSquare,
 	Monitor,
 	LucideIcon,
+	Sparkles,
 	// SquareSlash, // kilocode_change
 	// Glasses, // kilocode_change
 	Plug,
@@ -87,6 +88,7 @@ import { GhostServiceSettingsView } from "../kilocode/settings/GhostServiceSetti
 import { SlashCommandsSettings } from "./SlashCommandsSettings"
 import { UISettings } from "./UISettings"
 import ModesView from "../modes/ModesView"
+import EvolutionSettings from "./EvolutionSettings"
 // import McpView from "../mcp/McpView" // kilocode_change: own view
 
 export const settingsTabsContainer = "flex flex-1 overflow-hidden [&.narrow_.tab-label]:hidden"
@@ -116,6 +118,7 @@ const sectionNames = [
 	"prompts",
 	"ui",
 	"experimental",
+	"evolution",
 	"language",
 	"mcp",
 	"about",
@@ -751,6 +754,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 			{ id: "prompts", icon: MessageSquare },
 			// { id: "ui", icon: Glasses }, // kilocode_change: we have our own display section
 			{ id: "experimental", icon: FlaskConical },
+			{ id: "evolution", icon: Sparkles },
 			{ id: "language", icon: Globe },
 			{ id: "mcp", icon: Server },
 			{ id: "about", icon: Info },
@@ -890,7 +894,9 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 											? t(`kilocode:settings.sections.mcp`)
 											: id === "ghost"
 												? t(`kilocode:ghost.title`)
-												: t(`settings:sections.${id}`)}
+												: id === "evolution"
+													? "Evolution"
+													: t(`settings:sections.${id}`)}
 									</span>
 								</div>
 							</TabTrigger>
@@ -911,7 +917,9 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 													? t(`kilocode:settings.sections.mcp`)
 													: id === "ghost"
 														? t(`kilocode:ghost.title`)
-														: t(`settings:sections.${id}`)}
+														: id === "evolution"
+															? "Evolution"
+															: t(`settings:sections.${id}`)}
 											</p>
 										</TooltipContent>
 									</Tooltip>
@@ -1206,6 +1214,8 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							currentProfileKilocodeToken={apiConfiguration.kilocodeToken}
 						/>
 					)}
+
+					{activeTab === "evolution" && <EvolutionSettings />}
 
 					{/* Language Section */}
 					{activeTab === "language" && (

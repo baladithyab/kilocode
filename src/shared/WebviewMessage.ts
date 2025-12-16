@@ -285,6 +285,9 @@ export interface WebviewMessage {
 		| "cancelDeviceAuth" // kilocode_change: Cancel device auth flow
 		| "deviceAuthCompleteWithProfile" // kilocode_change: Device auth complete with specific profile
 		| "requestChatCompletion" // kilocode_change: Request FIM completion for chat text area
+		| "evolution.requestState"
+		| "evolution.configure"
+		| "evolution.setAutomationLevel"
 	text?: string
 	completionRequestId?: string // kilocode_change
 	shareId?: string // kilocode_change - for sessionFork
@@ -331,6 +334,7 @@ export interface WebviewMessage {
 	customPrompt?: PromptComponent
 	dataUrls?: string[]
 	values?: Record<string, any>
+	data?: any
 	query?: string
 	setting?: string
 	slug?: string

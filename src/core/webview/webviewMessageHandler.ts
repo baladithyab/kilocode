@@ -4139,8 +4139,8 @@ export const webviewMessageHandler = async (
 					throw new Error("Missing prompt text")
 				}
 
-				// Always use current configuration
-				const config = (await provider.getState()).apiConfiguration
+				// Prefer an explicit per-request configuration (CLI/headless), otherwise fall back to current state.
+				const config = message.apiConfiguration ?? (await provider.getState()).apiConfiguration
 
 				// Call the single completion handler
 				const result = await singleCompletionHandler(config, text)
@@ -4235,6 +4235,15 @@ export const webviewMessageHandler = async (
 			break
 		}
 		// kilocode_change end
+		case "evolution.requestState":
+		case "evolution.configure":
+		case "evolution.setAutomationLevel": {
+			const projectRoot = getCurrentCwd()
+			const { EvolutionWebviewHandler } = await import("../../services/evolution/EvolutionWebviewHandler")
+			const handler = new EvolutionWebviewHandler({ provider, projectRoot })
+			await handler.handle(message as WebviewMessage)
+			break
+		}
 		default: {
 			// console.log(`Unhandled message type: ${message.type}`)
 			//

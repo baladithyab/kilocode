@@ -50,7 +50,8 @@ async function writeJsonUnique(dir: string, baseName: string, data: unknown): Pr
 	throw new Error(`Failed to find an unused filename for '${baseName}' in '${dir}'.`)
 }
 
-const uiMessagesSchema = z.array(clineMessageSchema)
+// Avoid TS "type instantiation is excessively deep" issues with complex zod generics.
+const uiMessagesSchema: z.ZodTypeAny = z.array(clineMessageSchema as unknown as z.ZodTypeAny)
 
 export async function runTraceExportCli(args: TraceExportCliArgs): Promise<{ outputPath: string }> {
 	const { workspaceRoot, traceInputPath, taskDir, redact, outDir } = args
@@ -77,14 +78,14 @@ export async function runTraceExportCli(args: TraceExportCliArgs): Promise<{ out
 		const uiRaw = await fs.readFile(uiPath, "utf8")
 		const uiMessages = uiMessagesSchema.parse(JSON.parse(uiRaw))
 
-		let apiMessages: unknown[] | undefined = undefined
+		let apiMessages: unknown[] = []
 		if (await fileExists(apiPath)) {
 			try {
 				const apiRaw = await fs.readFile(apiPath, "utf8")
 				const parsed = JSON.parse(apiRaw)
 				apiMessages = Array.isArray(parsed) ? parsed : [parsed]
 			} catch {
-				apiMessages = undefined
+				apiMessages = []
 			}
 		}
 

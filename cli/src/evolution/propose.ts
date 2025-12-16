@@ -24,7 +24,7 @@ export async function runEvolveProposeCli(args: EvolveProposeCliArgs): Promise<{
 		projectRoot,
 		tracePath: absTracePath,
 		reportsDir: absReportsDir,
-		outDir,
+		...(outDir ? { outDir } : {}),
 	})
 
 	return {

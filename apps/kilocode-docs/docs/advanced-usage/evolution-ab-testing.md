@@ -17,9 +17,25 @@ An A/B test involves running the same task multiple times with slight variations
 
 Kilo Code executes both variants and evaluates them using your project's **Rubrics**.
 
-## Manual A/B Testing
+## Running an A/B Test
 
-You can trigger an A/B test manually via the CLI or VS Code.
+You can trigger an A/B test manually via the Evolution Settings Panel, Command Palette, or CLI.
+
+### Using Evolution Settings (Recommended)
+
+1.  Go to **Settings > Evolution**.
+2.  Under **Quick Actions**, click **Start A/B Test**.
+3.  In the dialog that appears:
+    - Enter a description of the task to test.
+    - Select the configuration file you want to test against (Variant B).
+4.  Click **Run Test**.
+
+### Using VS Code Command Palette
+
+1.  Open the Command Palette.
+2.  Run **`Kilo Code: Evolution: Run A/B Test`**.
+3.  Enter the task description.
+4.  Select the configuration for Variant B.
 
 ### Using the CLI
 
@@ -27,16 +43,9 @@ You can trigger an A/B test manually via the CLI or VS Code.
 kilocode evolution test --task "Refactor the auth service" --variant-b "path/to/new-prompt.md"
 ```
 
-### Using VS Code
-
-1.  Open the Command Palette.
-2.  Run **`Kilo Code: Evolution: Run A/B Test`**.
-3.  Enter the task description.
-4.  Select the configuration for Variant B.
-
 ## Automated A/B Testing (Level 3)
 
-At **Automation Level 3**, Kilo Code can autonomously design and run A/B tests.
+At **Automation Level 3**, Kilo Code can autonomously design and run A/B tests. You don't need to manually trigger them.
 
 1.  **Hypothesis Generation**: The system identifies a potential improvement (e.g., "Making the code review prompt stricter might reduce bugs").
 2.  **Experiment Setup**: It creates a temporary configuration for Variant B.

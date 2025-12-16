@@ -10,20 +10,72 @@ The **Evolution Layer** is Kilo Code's system for maintaining project-specific m
 
 All Evolution Layer artifacts are stored locally in your project's `.kilocode` directory, ensuring that your project's intelligence is version-controlled and shared with your team.
 
-## Bootstrapping the Evolution Layer
+💡 Tip: If you're new to the Evolution Layer, start with the 5-minute guide: [Evolution Layer: 5-Minute Quick Start](./evolution-quick-start.md).
 
-Kilo Code provides a built-in "bootstrap" feature to quickly set up the standard Evolution Layer directory structure. This process is designed to be safe and transparent.
+## Setting Up via Settings UI
 
-### Using VS Code
+Kilo Code provides a dedicated **Evolution Settings Panel** to manage the entire lifecycle of your project's evolution. This is the recommended way to bootstrap and configure the Evolution Layer.
+
+### Evolution Settings Panel
+
+To access the panel:
+
+1. Open VS Code Settings (`Cmd+,` or `Ctrl+,`).
+2. Navigate to the **Evolution** tab.
+
+📷 Screenshot: Evolution Settings Panel (Settings → Evolution)
+
+<!-- TODO: Add screenshot asset under /docs/img/evolution/ and update this doc to reference it -->
+
+The panel includes:
+
+- **Status Dashboard**: Shows the current health of your Evolution Layer, including active policies, recent self-healing events, and pending proposals.
+- **Council Configuration**: A UI to select and configure the "Council" of AI personas that review changes.
+- **Automation Level Selector**: Choose how much automation you want:
+    - **Level 0**: Manual review
+    - **Level 1**: Auto-trigger reviews, manual approval
+    - **Level 2**: Auto-apply low-risk proposals
+    - **Level 3**: Full closed-loop (advanced)
+- **Quick Actions**: One-click buttons for common tasks like "Bootstrap", "Sync Mode Map", and "Export Trace".
+
+### Bootstrapping
+
+If your project doesn't have an Evolution Layer yet, you'll see a prominent **"Bootstrap Evolution Layer"** button in the settings panel.
+
+1.  Go to **Settings > Evolution**.
+2.  Click **Bootstrap Evolution Layer**.
+3.  Review the plan in the notification window.
+4.  Confirm to generate the standard directory structure.
+
+💡 Tip: Bootstrapping is safe to run multiple times. It only creates missing files and never overwrites existing ones.
+
+### Getting Started (UI-first workflow)
+
+After bootstrapping, most users follow this flow:
+
+1.  **Configure your Council**
+    - In **Council Configuration**, select 3-5 profiles.
+    - Click **Configure Council**.
+2.  **Choose an Automation Level**
+    - Start with **Level 0** (manual) if you're evaluating the feature.
+    - Move to **Level 1-2** once you're comfortable with the proposal workflow.
+3.  **Use Quick Actions while you work**
+    - Export a trace after finishing a task.
+    - Run the Council review to generate a proposal.
+    - Apply (or reject) the proposal.
+
+⚠️ Note: UI labels and placement may vary slightly between versions. If you can't find the Evolution tab, search Settings for "Evolution".
+
+## Alternative: Command Line
+
+For advanced users or CI/CD pipelines, you can still use the Command Palette or CLI.
+
+### Using VS Code Command Palette
 
 1.  Open the Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`).
 2.  Run the command: **`Kilo Code: Bootstrap Evolution Layer`**.
-3.  Review the proposed changes in the notification or output window.
-4.  Confirm the action to generate the files.
 
 ### Using the CLI
-
-You can also bootstrap the Evolution Layer using the Kilo Code CLI:
 
 ```bash
 # Primary command
@@ -32,8 +84,6 @@ kilocode evolution bootstrap
 # Alias
 kilocode init evolution
 ```
-
-The CLI will display a plan of the files to be created and ask for confirmation before proceeding.
 
 ## Safety Guarantees
 
@@ -67,7 +117,13 @@ The bootstrap process creates the following structure under the `.kilocode` dire
 
 The Evolution Layer includes a **Mode Map Sync** capability that keeps your Evolution Mode Map in sync (seat → profile mappings), ensuring `.kilocode/evolution/council.yaml` stays aligned with `docs/llm-mode-map.yaml`.
 
-### Using VS Code
+### Using Settings UI
+
+1.  Go to **Settings > Evolution**.
+2.  Under **Quick Actions**, click **Sync Mode Map**.
+3.  Review the proposed changes and confirm.
+
+### Alternative: Command Palette
 
 1.  Open the Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`).
 2.  Run **`Kilo Code: Sync Evolution Mode Map (Preview)`**.
@@ -75,7 +131,7 @@ The Evolution Layer includes a **Mode Map Sync** capability that keeps your Evol
 
 To apply the sync from VS Code, run **`Kilo Code: Sync Evolution Mode Map (Apply)`**.
 
-### Using the CLI
+### Alternative: CLI
 
 ```bash
 # Preview (default)
@@ -102,6 +158,8 @@ The Evolution Layer supports four levels of automation to help you scale your pr
 - **Level 2: Auto-Apply** - Low-risk changes (like minor rule updates) are applied automatically.
 - **Level 3: Full Closed-Loop** - The system autonomously runs A/B tests, updates policies, and heals itself based on outcomes.
 
+You can configure these levels directly in the **Evolution Settings Panel**.
+
 For a detailed guide on setting up and using these features, see [Evolution Automation](./evolution-automation.md).
 
 ## Daily Workflow
@@ -110,7 +168,7 @@ To keep your Evolution Layer active and healthy, Kilo Code provides tools to int
 
 ### Quick Actions
 
-Use the **`Kilo Code: Evolution: Quick Actions`** command in VS Code to access common tasks:
+Use the **Quick Actions** in the Evolution Settings Panel to access common tasks:
 
 - Open the latest proposal or applied record.
 - Run a mode map sync.

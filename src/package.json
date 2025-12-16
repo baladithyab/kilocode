@@ -301,42 +301,42 @@
 			},
 			{
 				"command": "kilo-code.bootstrapEvolution",
-				"title": "Kilo Code: Bootstrap Evolution Layer",
+				"title": "Evolution - Bootstrap",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.exportTraceForCouncil",
-				"title": "Kilo Code: Export Trace for Council",
+				"title": "Evolution - Export Trace for Council",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.runCouncilReviewTrace",
-				"title": "Kilo Code: Run Council Review (Trace)",
+				"title": "Evolution - Run Council Review (Trace)",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.generateEvolutionProposalFromScorecards",
-				"title": "Kilo Code: Generate Evolution Proposal (from scorecards)",
+				"title": "Evolution - Generate Proposal (from scorecards)",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.evolutionQuickActions",
-				"title": "Kilo Code: Evolution: Quick Actions",
+				"title": "Evolution - Quick Actions",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.evolutionOpenLatestArtifact",
-				"title": "Kilo Code: Evolution: Open Latest Artifact…",
+				"title": "Evolution - Open Latest Artifact…",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.syncEvolutionModeMapPreview",
-				"title": "Kilo Code: Sync Evolution Mode Map (Preview)",
+				"title": "Evolution - Sync Mode Map (Preview)",
 				"category": "%configuration.title%"
 			},
 			{
 				"command": "kilo-code.syncEvolutionModeMapApply",
-				"title": "Kilo Code: Sync Evolution Mode Map (Apply)",
+				"title": "Evolution - Sync Mode Map (Apply)",
 				"category": "%configuration.title%"
 			}
 		],
