@@ -681,6 +681,66 @@
 					"maximum": 720,
 					"description": "Minimum hours between periodic Evolution nudges."
 				},
+				"kilo-code.evolution.automation.level": {
+					"type": "integer",
+					"default": 0,
+					"enum": [
+						0,
+						1,
+						2,
+						3
+					],
+					"enumDescriptions": [
+						"Level 0: Manual (Default) - No automated actions.",
+						"Level 1: Auto-Trigger - Automatically export trace and run Council on failure or high cost.",
+						"Level 2: Auto-Apply Low Risk - Auto-trigger Council, plus auto-apply low-risk proposals (e.g., docs, mode-map).",
+						"Level 3: Full Closed-Loop - Auto-apply all approved proposals with A/B testing and auto-rollback (Future)."
+					],
+					"description": "Defines the level of automation for the Evolution Layer."
+				},
+				"kilo-code.evolution.automation.triggers.failureRate": {
+					"type": "number",
+					"default": 0.3,
+					"minimum": 0,
+					"maximum": 1,
+					"description": "Trigger Council review when task failure rate exceeds this threshold. Set to 0 to disable."
+				},
+				"kilo-code.evolution.automation.triggers.costThreshold": {
+					"type": "number",
+					"default": 100,
+					"minimum": 0,
+					"description": "Trigger Council review when task cost exceeds this amount (in USD). Set to 0 to disable."
+				},
+				"kilo-code.evolution.automation.triggers.cooldown": {
+					"type": "number",
+					"default": 3600,
+					"minimum": 0,
+					"description": "Minimum seconds between automated Council runs to prevent excessive API usage."
+				},
+				"kilo-code.evolution.automation.safety.maxDailyRuns": {
+					"type": "number",
+					"default": 5,
+					"minimum": 1,
+					"maximum": 50,
+					"description": "Maximum number of automated Evolution runs per day."
+				},
+				"kilo-code.evolution.automation.safety.autoApplyTypes": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"enum": [
+							"mode-map",
+							"docs",
+							"memory",
+							"rubric"
+						]
+					},
+					"default": [
+						"mode-map",
+						"docs"
+					],
+					"description": "Categories of proposals that are safe to auto-apply in Level 2."
+				},
 				"kilo-code.debug": {
 					"type": "boolean",
 					"default": false,

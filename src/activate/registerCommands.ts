@@ -15,7 +15,7 @@ import { generateTerminalCommand } from "../utils/terminalCommandGenerator" // k
 
 import { AgentManagerProvider } from "../core/kilocode/agent-manager/AgentManagerProvider" // kilocode_change
 
-import { getEvolutionCommandsMap, initializeEvolutionPeriodicNudge } from "./commands"
+import { getEvolutionCommandsMap, initializeEvolutionPeriodicNudge, initializeEvolutionAutomation } from "./commands"
 import type { RegisterCommandOptions } from "./commands"
 
 import { registerHumanRelayCallback, unregisterHumanRelayCallback, handleHumanRelayResponse } from "./humanRelay"
@@ -84,7 +84,14 @@ export const registerCommands = (options: RegisterCommandOptions) => {
 	registerAgentManager(options)
 	// kilocode_change end
 
+	// Initialize Evolution Layer features
 	initializeEvolutionPeriodicNudge(options)
+	initializeEvolutionAutomation(options)
+
+	// Log initialization to Evolution output channel
+	outputChannel.appendLine(
+		"[Evolution Layer] Initialization complete - periodic nudge and automation handlers registered",
+	)
 
 	for (const [id, callback] of Object.entries(getCommandsMap(options))) {
 		const command = getCommand(id as CommandId)

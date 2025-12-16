@@ -2,6 +2,12 @@ import * as vscode from "vscode"
 import { readdir, readFile, stat } from "node:fs/promises"
 import * as nodePath from "node:path"
 
+import { createABTestService, type ABTestService } from "../../services/evolution/ABTestService"
+import {
+	type ABTestVariantConfig,
+	type ABTestResult,
+	DEFAULT_AB_TEST_SETTINGS,
+} from "../../shared/evolution/abTestSchemas"
 import { applyEvolutionBootstrap, planEvolutionBootstrap } from "../../shared/evolution/bootstrap"
 import {
 	applyModeMapSync,
@@ -13,12 +19,25 @@ import { generateEvolutionProposalFromScorecards as generateEvolutionProposalFro
 import { findLatestEvolutionArtifact, findLatestEvolutionArtifacts } from "../../shared/evolution/artifacts"
 import { hoursToMs, shouldShowPeriodicNudge } from "../../shared/evolution/nudges"
 import { isEvolutionBootstrapped } from "../../shared/evolution/workspace"
+import {
+	AutomationLevel,
+	checkRateLimits,
+	createOrchestrationResult,
+	DEFAULT_AUTOMATION_CONFIG,
+	DEFAULT_RATE_LIMIT_STATE,
+	evaluateTriggerConditions,
+	TriggerReason,
+	updateRateLimitState,
+	type AutoApplyCategory,
+	type AutomationRateLimitState,
+	type EvolutionAutomationConfig,
+} from "../../shared/evolution/automation"
 import { TraceExporter } from "../../core/traces/TraceExporter"
 import { singleCompletionHandler } from "../../utils/single-completion-handler"
 
 import { DIFF_VIEW_URI_SCHEME } from "../../integrations/editor/DiffViewProvider"
 
-import { RooCodeEventName, type CommandId } from "@roo-code/types"
+import { RooCodeEventName, type CommandId, type TokenUsage, type ToolUsage } from "@roo-code/types"
 
 import { getCommand } from "../../utils/commands"
 import { ClineProvider } from "../../core/webview/ClineProvider"
@@ -54,6 +73,7 @@ type PeriodicNudgeWorkspaceState = {
 type PeriodicNudgeStateByWorkspace = Record<string, PeriodicNudgeWorkspaceState>
 
 const PERIODIC_NUDGE_STATE_KEY = "kilo-code.evolution.nudges.periodicStateByWorkspace"
+const AUTOMATION_RATE_LIMIT_STATE_KEY = "kilo-code.evolution.automation.rateLimitState"
 
 function loadPeriodicNudgeState(context: vscode.ExtensionContext): PeriodicNudgeStateByWorkspace {
 	return (context.globalState.get(PERIODIC_NUDGE_STATE_KEY) as PeriodicNudgeStateByWorkspace | undefined) ?? {}
@@ -205,6 +225,382 @@ export function initializeEvolutionPeriodicNudge(options: RegisterCommandOptions
 	}, 2_000)
 }
 
+// ============================================================================
+// Evolution Automation
+// ============================================================================
+
+/**
+ * Load automation rate limit state from global state
+ */
+function loadAutomationRateLimitState(context: vscode.ExtensionContext): AutomationRateLimitState {
+	return (
+		(context.globalState.get(AUTOMATION_RATE_LIMIT_STATE_KEY) as AutomationRateLimitState | undefined) ??
+		DEFAULT_RATE_LIMIT_STATE
+	)
+}
+
+/**
+ * Save automation rate limit state to global state
+ */
+async function saveAutomationRateLimitState(
+	context: vscode.ExtensionContext,
+	state: AutomationRateLimitState,
+): Promise<void> {
+	await context.globalState.update(AUTOMATION_RATE_LIMIT_STATE_KEY, state)
+}
+
+/**
+ * Load automation config from VS Code settings
+ */
+function loadAutomationConfig(): EvolutionAutomationConfig {
+	const config = vscode.workspace.getConfiguration("kilo-code")
+
+	const level = config.get<number>("evolution.automation.level", DEFAULT_AUTOMATION_CONFIG.level)
+	const failureRate = config.get<number>(
+		"evolution.automation.triggers.failureRate",
+		DEFAULT_AUTOMATION_CONFIG.triggers.failureRate,
+	)
+	const costThreshold = config.get<number>(
+		"evolution.automation.triggers.costThreshold",
+		DEFAULT_AUTOMATION_CONFIG.triggers.costThreshold,
+	)
+	const cooldown = config.get<number>(
+		"evolution.automation.triggers.cooldown",
+		DEFAULT_AUTOMATION_CONFIG.triggers.cooldown,
+	)
+	const maxDailyRuns = config.get<number>(
+		"evolution.automation.safety.maxDailyRuns",
+		DEFAULT_AUTOMATION_CONFIG.safety.maxDailyRuns,
+	)
+	const autoApplyTypes = config.get<AutoApplyCategory[]>(
+		"evolution.automation.safety.autoApplyTypes",
+		DEFAULT_AUTOMATION_CONFIG.safety.autoApplyTypes,
+	)
+
+	return {
+		level: level as AutomationLevel,
+		triggers: {
+			failureRate,
+			costThreshold,
+			cooldown,
+		},
+		safety: {
+			maxDailyRuns,
+			autoApplyTypes,
+		},
+	}
+}
+
+/**
+ * Run council review for automation (silent version without user prompts)
+ */
+async function runCouncilReviewForAutomation(args: {
+	projectRoot: string
+	traceAbsPath: string
+	provider: ClineProvider
+	evolutionOutputChannel: vscode.OutputChannel
+}): Promise<{ success: boolean; reportsDir?: string; error?: string }> {
+	const { projectRoot, traceAbsPath, provider, evolutionOutputChannel } = args
+
+	logEvolutionEvent(evolutionOutputChannel, {
+		event: "vscode.evolution.automation.council.run",
+		phase: "start",
+		ts: new Date().toISOString(),
+		data: {
+			tracePath: nodePath.relative(projectRoot, traceAbsPath),
+			councilConfigPath: ".kilocode/evolution/council.yaml",
+			outDir: ".kilocode/evals/reports",
+		},
+	})
+
+	try {
+		const result = await runCouncilReview({
+			projectRoot,
+			tracePath: traceAbsPath,
+			resolveProfile: async (profileName) => {
+				const { name: _name, ...profile } = await provider.providerSettingsManager.getProfile({
+					name: profileName,
+				})
+				return profile
+			},
+			completePrompt: async (settings, prompt) => await singleCompletionHandler(settings, prompt),
+		})
+
+		const relReportsDir = nodePath.relative(projectRoot, result.reportsDir)
+
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.council.run",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				reportsDir: relReportsDir,
+				scorecards: result.scorecardPaths.length,
+			},
+		})
+
+		return { success: true, reportsDir: result.reportsDir }
+	} catch (error) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.council.run",
+			phase: "error",
+			ts: new Date().toISOString(),
+			data: {
+				error: error instanceof Error ? error.message : String(error),
+			},
+		})
+
+		return { success: false, error: error instanceof Error ? error.message : String(error) }
+	}
+}
+
+/**
+ * Handle automation flow after task completion
+ */
+async function handleEvolutionAutomation(args: {
+	context: vscode.ExtensionContext
+	provider: ClineProvider
+	evolutionOutputChannel: vscode.OutputChannel
+	taskId: string
+	tokenUsage: TokenUsage
+	toolUsage: ToolUsage
+}): Promise<void> {
+	const { context, provider, evolutionOutputChannel, taskId, tokenUsage } = args
+
+	const projectRoot = getWorkspaceRootForEvolution() ?? provider.cwd
+	if (!projectRoot) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.skipped",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: { reason: "no_project_root" },
+		})
+		return
+	}
+
+	// Load configuration
+	const automationConfig = loadAutomationConfig()
+
+	// Level 0 = manual mode, skip automation
+	if (automationConfig.level === AutomationLevel.Manual) {
+		return
+	}
+
+	// Check if Evolution is bootstrapped
+	const bootstrapped = await isEvolutionBootstrapped(projectRoot)
+	if (!bootstrapped) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.skipped",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: { reason: "not_bootstrapped", projectRoot },
+		})
+		return
+	}
+
+	// Get history item for more context
+	const historyItem = provider.getTaskHistory().find((h) => h.id === taskId)
+
+	// Evaluate trigger conditions
+	const triggerResult = evaluateTriggerConditions(automationConfig, tokenUsage, historyItem)
+
+	if (!triggerResult.shouldTrigger) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.skipped",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				reason: "no_trigger",
+				cost: tokenUsage.totalCost,
+				threshold: automationConfig.triggers.costThreshold,
+			},
+		})
+		return
+	}
+
+	// Check rate limits
+	const rateLimitState = loadAutomationRateLimitState(context)
+	const rateLimitCheck = checkRateLimits(automationConfig, rateLimitState)
+
+	if (!rateLimitCheck.allowed) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.skipped",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				reason: "rate_limited",
+				detail: rateLimitCheck.reason,
+			},
+		})
+		return
+	}
+
+	// Start automation flow
+	logEvolutionEvent(evolutionOutputChannel, {
+		event: "vscode.evolution.automation.flow",
+		phase: "start",
+		ts: new Date().toISOString(),
+		data: {
+			taskId,
+			triggerReason: triggerResult.reason,
+			triggerDetails: triggerResult.details,
+			automationLevel: automationConfig.level,
+			projectRoot,
+		},
+	})
+
+	// Show status bar indicator
+	const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+	statusItem.text = "$(sync~spin) Evolution Council..."
+	statusItem.tooltip = `Evolution automation running (Reason: ${triggerResult.reason})`
+	statusItem.show()
+
+	try {
+		// Step 1: Export trace
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.trace.export",
+			phase: "start",
+			ts: new Date().toISOString(),
+			data: { taskId },
+		})
+
+		const traceResult = await TraceExporter.exportTraceForCouncil({
+			workspaceRoot: projectRoot,
+			globalStoragePath: provider.contextProxy.globalStorageUri.fsPath,
+			taskId,
+			historyItem,
+			redact: true, // Always redact for automated exports
+		})
+
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.trace.export",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: { outputPath: traceResult.outputPath },
+		})
+
+		// Step 2: Run Council Review
+		statusItem.text = "$(sync~spin) Evolution Council reviewing..."
+		const councilResult = await runCouncilReviewForAutomation({
+			projectRoot,
+			traceAbsPath: traceResult.outputPath,
+			provider,
+			evolutionOutputChannel,
+		})
+
+		if (!councilResult.success || !councilResult.reportsDir) {
+			throw new Error(councilResult.error ?? "Council review failed")
+		}
+
+		// Step 3: Generate Proposal
+		statusItem.text = "$(sync~spin) Generating proposal..."
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.proposal.generate",
+			phase: "start",
+			ts: new Date().toISOString(),
+			data: { reportsDir: councilResult.reportsDir },
+		})
+
+		const proposalResult = await generateEvolutionProposalFromScorecardsShared({
+			projectRoot,
+			tracePath: traceResult.outputPath,
+			reportsDir: councilResult.reportsDir,
+		})
+
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.proposal.generate",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				proposalDir: nodePath.relative(projectRoot, proposalResult.proposalDir),
+				markdownPath: nodePath.relative(projectRoot, proposalResult.markdownPath),
+			},
+		})
+
+		// Update rate limit state
+		const newRateLimitState = updateRateLimitState(rateLimitState, triggerResult.reason)
+		await saveAutomationRateLimitState(context, newRateLimitState)
+
+		// Log completion
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.flow",
+			phase: "end",
+			ts: new Date().toISOString(),
+			data: {
+				taskId,
+				triggerReason: triggerResult.reason,
+				proposalDir: nodePath.relative(projectRoot, proposalResult.proposalDir),
+				automationLevel: automationConfig.level,
+			},
+		})
+
+		// Show notification based on automation level
+		const relProposalDir = nodePath.relative(projectRoot, proposalResult.proposalDir)
+		if (automationConfig.level >= AutomationLevel.AutoTrigger) {
+			const action = await vscode.window.showInformationMessage(
+				`Evolution Proposal Generated (Reason: ${triggerResult.reason === TriggerReason.HighCost ? "High Cost" : "Task Issue"}). Click to review.`,
+				"Open Proposal",
+				"Dismiss",
+			)
+
+			if (action === "Open Proposal") {
+				await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(proposalResult.markdownPath))
+			}
+		}
+	} catch (error) {
+		logEvolutionEvent(evolutionOutputChannel, {
+			event: "vscode.evolution.automation.flow",
+			phase: "error",
+			ts: new Date().toISOString(),
+			data: {
+				taskId,
+				error: error instanceof Error ? error.message : String(error),
+			},
+		})
+
+		// Don't show error to user for automation failures - just log
+		evolutionOutputChannel.appendLine(
+			`[evolution automation] Error: ${error instanceof Error ? error.message : String(error)}`,
+		)
+	} finally {
+		statusItem.dispose()
+	}
+}
+
+/**
+ * Initialize Evolution automation handler
+ */
+export function initializeEvolutionAutomation(options: RegisterCommandOptions): void {
+	const { context, provider } = options
+	const evoChannel = getEvolutionOutputChannel(context)
+
+	// Note: ClineProvider emits TaskCompleted with (taskId, tokenUsage, toolUsage)
+	// The API layer adds {isSubtask} but ClineProvider doesn't include it
+	const onTaskCompleted = (taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage) => {
+		void handleEvolutionAutomation({
+			context,
+			provider,
+			evolutionOutputChannel: evoChannel,
+			taskId,
+			tokenUsage,
+			toolUsage,
+		})
+	}
+
+	provider.on(RooCodeEventName.TaskCompleted, onTaskCompleted)
+	context.subscriptions.push({
+		dispose: () => provider.off(RooCodeEventName.TaskCompleted, onTaskCompleted),
+	})
+
+	logEvolutionEvent(evoChannel, {
+		event: "vscode.evolution.automation.initialized",
+		phase: "end",
+		ts: new Date().toISOString(),
+		data: {
+			config: loadAutomationConfig(),
+		},
+	})
+}
+
 async function runCouncilReviewForTrace(args: {
 	projectRoot: string
 	traceAbsPath: string
@@ -302,6 +698,8 @@ type EvolutionCommandId = Extract<
 	| "generateEvolutionProposalFromScorecards"
 	| "evolutionQuickActions"
 	| "evolutionOpenLatestArtifact"
+	| "evolutionRunABTest"
+	| "evolutionReviewABTestResults"
 >
 
 export function getEvolutionCommandsMap(options: RegisterCommandOptions): Record<EvolutionCommandId, any> {
@@ -1154,6 +1552,310 @@ export function getEvolutionCommandsMap(options: RegisterCommandOptions): Record
 				await vscode.window.showErrorMessage(
 					`Kilo Code: Failed to open artifact: ${error instanceof Error ? error.message : String(error)}`,
 				)
+			}
+		},
+
+		// ============================================================================
+		// Evolution A/B Testing Commands (Level 3 automation)
+		// ============================================================================
+
+		evolutionRunABTest: async () => {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+			if (!workspaceFolder) {
+				await vscode.window.showErrorMessage("Kilo Code: No workspace folder is open.")
+				return
+			}
+
+			const projectRoot = workspaceFolder.uri.fsPath
+			const evoChannel = getEvolutionOutputChannel(context)
+
+			// Check if Evolution is bootstrapped
+			const bootstrapped = await isEvolutionBootstrapped(projectRoot)
+			if (!bootstrapped) {
+				await vscode.window.showErrorMessage(
+					"Kilo Code: Evolution Layer not bootstrapped. Run 'Kilo Code: Bootstrap Evolution Layer' first.",
+				)
+				return
+			}
+
+			// Prompt for task prompt
+			const taskPrompt = await vscode.window.showInputBox({
+				title: "A/B Test Task Prompt",
+				prompt: "Enter the task prompt to test with different configurations",
+				placeHolder: "e.g., Refactor this function to use async/await",
+			})
+
+			if (!taskPrompt) return
+
+			// Define default variants (control vs architect mode)
+			const defaultVariants: ABTestVariantConfig[] = [
+				{
+					id: "control",
+					name: "Control (Code Mode)",
+					description: "Standard code mode execution",
+					modeSlug: "code",
+				},
+				{
+					id: "architect",
+					name: "Experiment (Architect Mode)",
+					description: "Architect mode for planning-first approach",
+					modeSlug: "architect",
+				},
+			]
+
+			// Ask user to configure variants or use defaults
+			const variantChoice = await vscode.window.showQuickPick(
+				[
+					{ label: "Use default variants (Code vs Architect)", value: "default" },
+					{ label: "Configure custom variants...", value: "custom" },
+				],
+				{ title: "A/B Test Variant Configuration" },
+			)
+
+			if (!variantChoice) return
+
+			let variants: ABTestVariantConfig[] = defaultVariants
+
+			if (variantChoice.value === "custom") {
+				// For custom variants, show a simple text input (in future, could be a more complex UI)
+				await vscode.window.showWarningMessage(
+					"Custom variant configuration is not yet implemented. Using default variants.",
+				)
+			}
+
+			// Get timeout setting from configuration
+			const config = vscode.workspace.getConfiguration("kilo-code")
+			const timeoutMs = config.get<number>(
+				"evolution.abTest.timeoutMs",
+				DEFAULT_AB_TEST_SETTINGS.defaultTimeoutMs,
+			)
+
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.abTest.run",
+				phase: "start",
+				ts: new Date().toISOString(),
+				data: {
+					projectRoot,
+					taskPrompt: taskPrompt.substring(0, 100),
+					variants: variants.map((v) => v.id),
+					timeoutMs,
+				},
+			})
+
+			// Create AB Test Service
+			const abTestService = createABTestService({
+				context,
+				provider,
+				outputChannel: evoChannel,
+				globalStorageDir: provider.contextProxy.globalStorageUri.fsPath,
+			})
+
+			// Show progress
+			const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+			statusItem.text = "$(sync~spin) Evolution A/B Test..."
+			statusItem.tooltip = "Running A/B test with variants"
+			statusItem.show()
+
+			// Set up progress listener
+			abTestService.on("progress", (progress) => {
+				statusItem.text = `$(sync~spin) A/B Test: ${progress.message}`
+				statusItem.tooltip = `${progress.currentVariantIndex + 1}/${progress.totalVariants} variants`
+			})
+
+			try {
+				const result = await abTestService.runABTest({
+					taskPrompt,
+					variants,
+					timeoutMs,
+					workspacePath: projectRoot,
+					enableCheckpoints: true,
+				})
+
+				logEvolutionEvent(evoChannel, {
+					event: "vscode.evolution.abTest.run",
+					phase: "end",
+					ts: new Date().toISOString(),
+					data: {
+						testId: result.testId,
+						status: result.status,
+						winnerId: result.winnerId,
+						outputDir: result.outputDir,
+					},
+				})
+
+				// Show results
+				if (result.outputDir) {
+					const choice = await vscode.window.showInformationMessage(
+						`A/B Test completed: ${result.status}. Winner: ${result.winnerId ?? "inconclusive"}`,
+						"Open Results",
+						"Send to Council Review",
+						"Dismiss",
+					)
+
+					if (choice === "Open Results") {
+						const summaryPath = nodePath.join(result.outputDir, "summary.md")
+						await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(summaryPath))
+					} else if (choice === "Send to Council Review") {
+						await vscode.commands.executeCommand(getCommand("evolutionReviewABTestResults"), result)
+					}
+				} else {
+					await vscode.window.showWarningMessage(
+						`A/B Test ${result.status}: ${result.error ?? "No output directory created"}`,
+					)
+				}
+			} catch (error) {
+				logEvolutionEvent(evoChannel, {
+					event: "vscode.evolution.abTest.run",
+					phase: "error",
+					ts: new Date().toISOString(),
+					data: {
+						error: error instanceof Error ? error.message : String(error),
+					},
+				})
+
+				await vscode.window.showErrorMessage(
+					`Kilo Code: A/B Test failed: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			} finally {
+				statusItem.dispose()
+			}
+		},
+
+		evolutionReviewABTestResults: async (result?: ABTestResult) => {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+			if (!workspaceFolder) {
+				await vscode.window.showErrorMessage("Kilo Code: No workspace folder is open.")
+				return
+			}
+
+			const projectRoot = workspaceFolder.uri.fsPath
+			const evoChannel = getEvolutionOutputChannel(context)
+
+			// If no result passed, let user pick from existing A/B test results
+			if (!result) {
+				const abTestsDir = nodePath.join(projectRoot, ".kilocode", "evolution", "ab-tests")
+
+				type ABTestPickItem = vscode.QuickPickItem & { absPath: string; mtimeMs: number }
+				const abTestItems: ABTestPickItem[] = []
+
+				try {
+					const entries = await readdir(abTestsDir, { withFileTypes: true })
+					for (const ent of entries) {
+						if (!ent.isDirectory()) continue
+						const absPath = nodePath.join(abTestsDir, ent.name)
+						const resultPath = nodePath.join(absPath, "result.json")
+						try {
+							const s = await stat(resultPath)
+							abTestItems.push({
+								label: ent.name,
+								description: nodePath.relative(projectRoot, absPath),
+								detail: new Date(s.mtimeMs).toLocaleString(),
+								absPath,
+								mtimeMs: s.mtimeMs,
+							})
+						} catch {
+							// No result.json in this directory
+						}
+					}
+				} catch {
+					// No ab-tests directory yet
+				}
+
+				if (abTestItems.length === 0) {
+					await vscode.window.showErrorMessage(
+						"Kilo Code: No A/B test results found. Run 'Kilo Code: Evolution: Run A/B Test' first.",
+					)
+					return
+				}
+
+				abTestItems.sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+				const pickedTest = await vscode.window.showQuickPick(abTestItems, {
+					title: "Kilo Code: Review A/B Test Results",
+					matchOnDescription: true,
+					matchOnDetail: true,
+				})
+
+				if (!pickedTest) return
+
+				// Load the result
+				try {
+					const resultPath = nodePath.join(pickedTest.absPath, "result.json")
+					const raw = await readFile(resultPath, "utf8")
+					result = JSON.parse(raw) as ABTestResult
+				} catch (error) {
+					await vscode.window.showErrorMessage(
+						`Kilo Code: Failed to load A/B test result: ${error instanceof Error ? error.message : String(error)}`,
+					)
+					return
+				}
+			}
+
+			logEvolutionEvent(evoChannel, {
+				event: "vscode.evolution.abTest.review",
+				phase: "start",
+				ts: new Date().toISOString(),
+				data: {
+					testId: result.testId,
+					variantCount: result.variants.length,
+				},
+			})
+
+			// For each variant that has a trace path, run council review
+			const variantsWithTraces = result.variants.filter((v) => v.tracePath)
+
+			if (variantsWithTraces.length === 0) {
+				await vscode.window.showWarningMessage(
+					"Kilo Code: No traces found for A/B test variants. Cannot run Council review.",
+				)
+				return
+			}
+
+			const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+			statusItem.text = "$(sync~spin) Reviewing A/B Test..."
+			statusItem.show()
+
+			try {
+				for (let i = 0; i < variantsWithTraces.length; i++) {
+					const variant = variantsWithTraces[i]
+					statusItem.text = `$(sync~spin) Reviewing variant ${i + 1}/${variantsWithTraces.length}...`
+
+					await runCouncilReviewForTrace({
+						projectRoot,
+						traceAbsPath: variant.tracePath!,
+						provider,
+						evolutionOutputChannel: evoChannel,
+					})
+				}
+
+				logEvolutionEvent(evoChannel, {
+					event: "vscode.evolution.abTest.review",
+					phase: "end",
+					ts: new Date().toISOString(),
+					data: {
+						testId: result.testId,
+						reviewedVariants: variantsWithTraces.length,
+					},
+				})
+
+				await vscode.window.showInformationMessage(
+					`Council review complete for ${variantsWithTraces.length} A/B test variant(s). Check reports in .kilocode/evals/reports/`,
+				)
+			} catch (error) {
+				logEvolutionEvent(evoChannel, {
+					event: "vscode.evolution.abTest.review",
+					phase: "error",
+					ts: new Date().toISOString(),
+					data: {
+						error: error instanceof Error ? error.message : String(error),
+					},
+				})
+
+				await vscode.window.showErrorMessage(
+					`Kilo Code: Council review failed: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			} finally {
+				statusItem.dispose()
 			}
 		},
 	}

@@ -86,6 +86,10 @@ export const commandIds = [
 	// Evolution Mode Map Sync
 	"syncEvolutionModeMapPreview",
 	"syncEvolutionModeMapApply",
+
+	// Evolution A/B Testing (Level 3 automation)
+	"evolutionRunABTest",
+	"evolutionReviewABTestResults",
 ] as const
 
 export type CommandId = (typeof commandIds)[number]
