@@ -138,7 +138,17 @@ const sidebars: SidebarsConfig = {
 					type: "category",
 					label: "Advanced Context Features",
 					items: [
-						"advanced-usage/evolution-layer",
+						{
+							type: "category",
+							label: "Evolution Layer",
+							items: [
+								"advanced-usage/evolution-layer",
+								"advanced-usage/evolution-automation",
+								"advanced-usage/evolution-policy-engine",
+								"advanced-usage/evolution-ab-testing",
+								"advanced-usage/evolution-self-healing",
+							],
+						},
 						"advanced-usage/memory-bank",
 						"features/codebase-indexing",
 						"advanced-usage/large-projects",

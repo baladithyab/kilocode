@@ -93,6 +93,17 @@ Mode Map Sync follows the **Propose-and-Apply** pattern:
 - **Review**: You can inspect the diff before applying.
 - **Apply**: Once confirmed, the changes are written to `.kilocode/evolution/council.yaml` and an applied record is created.
 
+## Automation Levels
+
+The Evolution Layer supports four levels of automation to help you scale your project's intelligence:
+
+- **Level 0: Manual (Default)** - You manually review and apply all changes.
+- **Level 1: Auto-Trigger** - Kilo Code automatically detects when changes are needed and prepares proposals, but waits for your approval.
+- **Level 2: Auto-Apply** - Low-risk changes (like minor rule updates) are applied automatically.
+- **Level 3: Full Closed-Loop** - The system autonomously runs A/B tests, updates policies, and heals itself based on outcomes.
+
+For a detailed guide on setting up and using these features, see [Evolution Automation](./evolution-automation.md).
+
 ## Daily Workflow
 
 To keep your Evolution Layer active and healthy, Kilo Code provides tools to integrate it into your daily routine.
