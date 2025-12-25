@@ -143,6 +143,7 @@ import { mergeApiMessages, addOrMergeUserContent } from "./kilocode"
 import { AutoApprovalHandler, checkAutoApproval } from "../auto-approval"
 import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
+import { DarwinService } from "../../shared/evolution"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
@@ -4536,8 +4537,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 
 		this.toolUsage[toolName].attempts++
-	}
 
+		// Darwin: Capture tool success event
+		DarwinService.captureToolSuccess(this.taskId, toolName, {
+			mode: this._taskMode,
+			model: this.api.getModel().id,
+		})
+	}
 	public recordToolError(toolName: ToolName, error?: string) {
 		if (!this.toolUsage[toolName]) {
 			this.toolUsage[toolName] = { attempts: 0, failures: 0 }
@@ -4549,6 +4555,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			this.emit(RooCodeEventName.TaskToolFailed, this.taskId, toolName, error)
 		}
 		TelemetryService.instance.captureEvent(TelemetryEventName.TOOL_ERROR, { toolName, error }) // kilocode_change
+
+		// Darwin: Capture tool error event and check for doom loop
+		DarwinService.captureToolError(this.taskId, toolName, error || "Unknown error", {
+			mode: this._taskMode,
+			model: this.api.getModel().id,
+		})
 	}
 
 	// Getters

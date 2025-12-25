@@ -10,3 +10,20 @@ export * from "./types"
 
 // Export config utilities
 export { DarwinConfig, getDarwinConfig, validateDarwinConfig } from "./config/DarwinConfig"
+
+// Export trace capture and storage
+export {
+	TraceCapture,
+	TraceStorage,
+	getTraceCapture,
+	resetTraceCapture,
+	type TraceFilter,
+	type TraceCaptureOptions,
+	type TraceStorageConfig,
+} from "./trace"
+
+// Export pattern detection and analysis
+export { PatternDetector, type PatternDetectorConfig } from "./analysis"
+
+// Export main service
+export { DarwinService } from "./DarwinService"
