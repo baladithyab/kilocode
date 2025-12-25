@@ -5,6 +5,7 @@ export * from "./codebase-index.js"
 export * from "./context-management.js"
 export * from "./cookie-consent.js"
 export * from "./events.js"
+export * from "./evolution.js" // kilocode_change: Darwin evolution system
 export * from "./experiment.js"
 export * from "./feature-flags.js"
 export * from "./followup.js"
