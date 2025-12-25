@@ -6,6 +6,7 @@ import {
 	type CustomModePrompts,
 	type ModeConfig,
 	type ExperimentId,
+	type DarwinConfig,
 	GhostServiceSettings, // kilocode_change
 	openRouterDefaultModelId, // kilocode_change
 	type TodoItem,
@@ -47,6 +48,8 @@ export interface ExtensionStateContextType extends ExtensionState {
 	dismissedNotificationIds: string[] // kilocode_change
 	yoloMode?: boolean // kilocode_change
 	setYoloMode: (value: boolean) => void // kilocode_Change
+	darwin?: DarwinConfig
+	setDarwin: (value: DarwinConfig) => void
 	// kilocode_change start - Auto-purge settings
 	autoPurgeEnabled?: boolean
 	setAutoPurgeEnabled: (value: boolean) => void
@@ -667,6 +670,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		setHoveringTaskTimeline: (value) => setState((prevState) => ({ ...prevState, hoveringTaskTimeline: value })),
 		setShowTimestamps: (value) => setState((prevState) => ({ ...prevState, showTimestamps: value })),
 		setYoloMode: (value) => setState((prevState) => ({ ...prevState, yoloMode: value })), // kilocode_change
+		setDarwin: (value) => setState((prevState) => ({ ...prevState, darwin: value })),
 		// kilocode_change end
 		setAutoApprovalEnabled: (value) => setState((prevState) => ({ ...prevState, autoApprovalEnabled: value })),
 		setCustomModes: (value) => setState((prevState) => ({ ...prevState, customModes: value })),

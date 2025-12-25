@@ -15,6 +15,7 @@ import { modeConfigSchema } from "./mode.js"
 import { customModePromptsSchema, customSupportPromptsSchema } from "./mode.js"
 import { languagesSchema } from "./vscode.js"
 import { fastApplyModelSchema, ghostServiceSettingsSchema, fastApplyApiProviderSchema } from "./kilocode/kilocode.js"
+import { darwinConfigSchema, DEFAULT_DARWIN_CONFIG } from "./evolution.js"
 
 /**
  * Default delay in milliseconds after writes to allow diagnostics to detect potential problems.
@@ -235,6 +236,12 @@ export const globalSettingsSchema = z.object({
 	hasOpenedModeSelector: z.boolean().optional(),
 	lastModeExportPath: z.string().optional(),
 	lastModeImportPath: z.string().optional(),
+
+	/**
+	 * Darwin evolution system configuration
+	 * Enables self-improving agent capabilities
+	 */
+	darwin: darwinConfigSchema.optional(),
 })
 
 export type GlobalSettings = z.infer<typeof globalSettingsSchema>
@@ -427,6 +434,10 @@ export const EVALS_SETTINGS: RooCodeSettings = {
 	mode: "code", // "architect",
 
 	customModes: [],
+
+	// kilocode_change start - Darwin evolution system defaults
+	darwin: DEFAULT_DARWIN_CONFIG,
+	// kilocode_change end
 }
 
 export const EVALS_TIMEOUT = 5 * 60 * 1_000

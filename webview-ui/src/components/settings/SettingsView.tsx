@@ -30,6 +30,7 @@ import {
 	Plug,
 	Server,
 	Users2,
+	Sparkles, // kilocode_change: Darwin evolution system
 } from "lucide-react"
 
 // kilocode_change
@@ -85,6 +86,7 @@ import McpView from "../kilocodeMcp/McpView" // kilocode_change
 import deepEqual from "fast-deep-equal" // kilocode_change
 import { GhostServiceSettingsView } from "../kilocode/settings/GhostServiceSettings" // kilocode_change
 import { SlashCommandsSettings } from "./SlashCommandsSettings"
+import { DarwinSettings } from "./DarwinSettings" // kilocode_change: Darwin evolution system
 import { UISettings } from "./UISettings"
 import ModesView from "../modes/ModesView"
 // import McpView from "../mcp/McpView" // kilocode_change: own view
@@ -115,6 +117,7 @@ const sectionNames = [
 	"mcp",
 	"prompts",
 	"ui",
+	"darwin", // kilocode_change: Darwin evolution system
 	"experimental",
 	"language",
 	"mcp",
@@ -171,8 +174,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 		allowedCommands,
 		deniedCommands,
 		allowedMaxRequests,
-		allowedMaxCost,
-		language,
 		alwaysAllowBrowser,
 		alwaysAllowExecute,
 		alwaysAllowMcp,
@@ -228,7 +229,18 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 		maxImageFileSize,
 		maxTotalImageSize,
 		terminalCompressProgressBar,
-		maxConcurrentFileReads,
+		// kilocode_change start: Fast Apply AI for code completion
+		fastApplyAiProvider: _fastApplyAiProvider,
+		fastApplyAiModel: _fastApplyAiModel,
+		fastApplyAiApiKey: _fastApplyAiApiKey,
+		fastApplyAwsRegion: _fastApplyAwsRegion,
+		fastApplyMaxTokens: _fastApplyMaxTokens,
+		fastApplyTemperature: _fastApplyTemperature,
+		fastApplyTopP: _fastApplyTopP,
+		fastApplyFrequencyPenalty: _fastApplyFrequencyPenalty,
+		fastApplyPresencePenalty: _fastApplyPresencePenalty,
+		// kilocode_change end: Fast Apply AI for code completion
+		maxConcurrentFileReads: _maxConcurrentFileReads,
 		allowVeryLargeReads, // kilocode_change
 		terminalCommandApiConfigId, // kilocode_change
 		condensingApiConfigId,
@@ -261,6 +273,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 		includeCurrentTime,
 		includeCurrentCost,
 		maxGitStatusFiles,
+		darwin, // kilocode_change: Darwin evolution system
 	} = cachedState
 
 	const apiConfiguration = useMemo(() => cachedState.apiConfiguration ?? {}, [cachedState.apiConfiguration])
@@ -752,6 +765,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 			{ id: "terminal", icon: SquareTerminal },
 			{ id: "prompts", icon: MessageSquare },
 			// { id: "ui", icon: Glasses }, // kilocode_change: we have our own display section
+			{ id: "darwin" as const, icon: Sparkles }, // kilocode_change: Darwin evolution system
 			{ id: "experimental", icon: FlaskConical },
 			{ id: "language", icon: Globe },
 			{ id: "mcp", icon: Server },
@@ -973,6 +987,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 											}
 										}
 									}}
+									// kilocode_change start - autocomplete profile type system
 									onRenameConfig={(oldName: string, newName: string) => {
 										vscode.postMessage({
 											type: "renameApiConfiguration",
@@ -987,7 +1002,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 											prevApiConfigName.current = newName
 										}
 									}}
-									// kilocode_change start - autocomplete profile type system
 									onUpsertConfig={(configName: string, profileType?: ProfileType) => {
 										vscode.postMessage({
 											type: "upsertApiConfiguration",
@@ -1028,8 +1042,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							alwaysAllowWriteOutsideWorkspace={alwaysAllowWriteOutsideWorkspace}
 							alwaysAllowWriteProtected={alwaysAllowWriteProtected}
 							alwaysAllowBrowser={alwaysAllowBrowser}
-							alwaysApproveResubmit={alwaysApproveResubmit}
-							requestDelaySeconds={requestDelaySeconds}
 							alwaysAllowMcp={alwaysAllowMcp}
 							alwaysAllowModeSwitch={alwaysAllowModeSwitch}
 							alwaysAllowSubtasks={alwaysAllowSubtasks}
@@ -1124,7 +1136,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							maxReadFileLine={maxReadFileLine}
 							maxImageFileSize={maxImageFileSize}
 							maxTotalImageSize={maxTotalImageSize}
-							maxConcurrentFileReads={maxConcurrentFileReads}
+							maxConcurrentFileReads={cachedState.maxConcurrentFileReads ?? 5}
 							allowVeryLargeReads={allowVeryLargeReads /* kilocode_change */}
 							profileThresholds={profileThresholds}
 							includeDiagnosticMessages={includeDiagnosticMessages}
@@ -1183,6 +1195,12 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 						/>
 					)}
 
+					{/* kilocode_change start: Darwin Evolution System */}
+					{activeTab === "darwin" && (
+						<DarwinSettings darwin={darwin} setCachedStateField={setCachedStateField} />
+					)}
+					{/* kilocode_change end: Darwin Evolution System */}
+
 					{/* Experimental Section */}
 					{activeTab === "experimental" && (
 						<ExperimentalSettings
@@ -1215,7 +1233,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 						<LanguageSettings language={language || "en"} setCachedStateField={setCachedStateField} />
 					)}
 
-					{/* kilocode_change */}
 					{/* MCP Section */}
 					{activeTab === "mcp" && <McpView />}
 

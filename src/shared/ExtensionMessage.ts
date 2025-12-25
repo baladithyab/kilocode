@@ -458,6 +458,7 @@ export type ExtensionState = Pick<
 	| "includeCurrentTime"
 	| "includeCurrentCost"
 	| "maxGitStatusFiles"
+	| "darwin" // kilocode_change: Darwin evolution system settings
 > & {
 	version: string
 	clineMessages: ClineMessage[]
