@@ -25,5 +25,23 @@ export {
 // Export pattern detection and analysis
 export { PatternDetector, type PatternDetectorConfig } from "./analysis"
 
+// Export proposal generation
+export { ProposalGenerator, type ProposalGeneratorOptions } from "./proposals"
+
+// Export state management
+export { StateManager, type StateManagerConfig } from "./state"
+
+// Export evolution engine
+export {
+	EvolutionEngine,
+	type EvolutionEngineConfig,
+	type EvolutionEvent,
+	type EvolutionEventType,
+	type EvolutionEventListener,
+} from "./core"
+
+// Export council system
+export { Council, type CouncilDecision, type CouncilConfig, type VotingPolicy } from "./council"
+
 // Export main service
 export { DarwinService } from "./DarwinService"

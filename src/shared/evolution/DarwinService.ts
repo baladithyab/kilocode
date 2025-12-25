@@ -4,6 +4,10 @@
  * This service manages:
  * - TraceCapture initialization and access
  * - PatternDetector for analyzing traces
+ * - ProposalGenerator for creating evolution proposals
+ * - Council for multi-agent proposal review
+ * - EvolutionEngine for orchestrating the evolution cycle
+ * - StateManager for persistence
  * - Integration with Task lifecycle events
  *
  * Usage:
@@ -12,10 +16,14 @@
  * - The service handles config, storage, and analysis internally
  */
 
-import type { DarwinConfig, LearningSignal } from "@roo-code/types"
+import type { DarwinConfig, LearningSignal, EvolutionProposal, EvolutionState } from "@roo-code/types"
 import { DEFAULT_DARWIN_CONFIG } from "@roo-code/types"
-import { TraceCapture, type TraceCaptureOptions, type TraceStorageConfig } from "./trace"
+import { TraceCapture, type TraceStorageConfig } from "./trace"
 import { PatternDetector } from "./analysis"
+import { ProposalGenerator } from "./proposals"
+import { StateManager } from "./state"
+import { EvolutionEngine, type EvolutionEvent, type EvolutionEventListener } from "./core"
+import { Council } from "./council"
 
 /** Service state */
 interface DarwinServiceState {
@@ -23,6 +31,10 @@ interface DarwinServiceState {
 	config: DarwinConfig
 	traceCapture: TraceCapture | null
 	patternDetector: PatternDetector | null
+	proposalGenerator: ProposalGenerator | null
+	stateManager: StateManager | null
+	evolutionEngine: EvolutionEngine | null
+	council: Council | null
 	workspacePath: string | null
 }
 
@@ -32,6 +44,10 @@ const state: DarwinServiceState = {
 	config: DEFAULT_DARWIN_CONFIG,
 	traceCapture: null,
 	patternDetector: null,
+	proposalGenerator: null,
+	stateManager: null,
+	evolutionEngine: null,
+	council: null,
 	workspacePath: null,
 }
 
@@ -77,13 +93,43 @@ export class DarwinService {
 			state.patternDetector = null
 		}
 
+		// Initialize proposal generator
+		if (config.enabled) {
+			state.proposalGenerator = new ProposalGenerator({ config })
+		} else {
+			state.proposalGenerator = null
+		}
+
+		// Initialize council if enabled
+		if (config.enabled && config.councilEnabled) {
+			state.council = new Council({ darwinConfig: config })
+		} else {
+			state.council = null
+		}
+
+		// Initialize state manager and evolution engine
+		if (config.enabled) {
+			state.stateManager = new StateManager({ workspacePath })
+			await state.stateManager.initialize()
+
+			state.evolutionEngine = new EvolutionEngine({
+				darwinConfig: config,
+				workspacePath,
+				council: state.council ?? undefined,
+			})
+			await state.evolutionEngine.initialize()
+		} else {
+			state.stateManager = null
+			state.evolutionEngine = null
+		}
+
 		state.isInitialized = true
 	}
 
 	/**
 	 * Update Darwin configuration
 	 */
-	static updateConfig(config: DarwinConfig): void {
+	static async updateConfig(config: DarwinConfig): Promise<void> {
 		state.config = config
 
 		if (state.traceCapture) {
@@ -92,6 +138,18 @@ export class DarwinService {
 
 		if (state.patternDetector) {
 			state.patternDetector.updateConfig(config)
+		}
+
+		if (state.proposalGenerator) {
+			state.proposalGenerator.updateConfig(config)
+		}
+
+		if (state.council) {
+			state.council.updateConfig(config)
+		}
+
+		if (state.evolutionEngine) {
+			await state.evolutionEngine.updateConfig(config)
 		}
 	}
 
@@ -128,6 +186,34 @@ export class DarwinService {
 	 */
 	static get patternDetector(): PatternDetector | null {
 		return state.patternDetector
+	}
+
+	/**
+	 * Get the ProposalGenerator instance (if initialized)
+	 */
+	static get proposalGenerator(): ProposalGenerator | null {
+		return state.proposalGenerator
+	}
+
+	/**
+	 * Get the StateManager instance (if initialized)
+	 */
+	static get stateManager(): StateManager | null {
+		return state.stateManager
+	}
+
+	/**
+	 * Get the EvolutionEngine instance (if initialized)
+	 */
+	static get evolutionEngine(): EvolutionEngine | null {
+		return state.evolutionEngine
+	}
+
+	/**
+	 * Get the Council instance (if initialized)
+	 */
+	static get council(): Council | null {
+		return state.council
 	}
 
 	// ==========================================================================
@@ -293,6 +379,108 @@ export class DarwinService {
 		return state.patternDetector.analyzeTraces(traces)
 	}
 
+	// ==========================================================================
+	// Proposal Generation & Evolution
+	// ==========================================================================
+
+	/**
+	 * Generate proposals from learning signals
+	 */
+	static generateProposals(signals: LearningSignal[]): EvolutionProposal[] {
+		if (!state.proposalGenerator) {
+			return []
+		}
+
+		return state.proposalGenerator.generateFromSignals(signals)
+	}
+
+	/**
+	 * Run a complete evolution cycle
+	 *
+	 * Analyzes patterns, generates proposals, reviews via council, and applies
+	 */
+	static async runEvolutionCycle(): Promise<{
+		signalsProcessed: number
+		proposalsGenerated: number
+		proposalsApplied: number
+	}> {
+		if (!state.evolutionEngine) {
+			return { signalsProcessed: 0, proposalsGenerated: 0, proposalsApplied: 0 }
+		}
+
+		return state.evolutionEngine.runEvolutionCycle()
+	}
+
+	/**
+	 * Add learning signals to the evolution engine
+	 */
+	static async addSignals(signals: LearningSignal[]): Promise<void> {
+		if (!state.evolutionEngine) {
+			return
+		}
+
+		await state.evolutionEngine.addSignals(signals)
+	}
+
+	/**
+	 * Get pending proposals that need review
+	 */
+	static getPendingProposals(): EvolutionProposal[] {
+		if (!state.evolutionEngine) {
+			return []
+		}
+
+		return state.evolutionEngine.getPendingProposals()
+	}
+
+	/**
+	 * Approve a proposal manually
+	 */
+	static async approveProposal(proposalId: string, notes?: string): Promise<boolean> {
+		if (!state.evolutionEngine) {
+			return false
+		}
+
+		return state.evolutionEngine.approveProposal(proposalId, notes)
+	}
+
+	/**
+	 * Reject a proposal manually
+	 */
+	static async rejectProposal(proposalId: string, reason?: string): Promise<boolean> {
+		if (!state.evolutionEngine) {
+			return false
+		}
+
+		return state.evolutionEngine.rejectProposal(proposalId, reason)
+	}
+
+	/**
+	 * Get current evolution state
+	 */
+	static getEvolutionState(): Readonly<EvolutionState> | null {
+		if (!state.evolutionEngine) {
+			return null
+		}
+
+		return state.evolutionEngine.getState()
+	}
+
+	/**
+	 * Subscribe to evolution events
+	 */
+	static onEvolutionEvent(listener: EvolutionEventListener): () => void {
+		if (!state.evolutionEngine) {
+			return () => {}
+		}
+
+		return state.evolutionEngine.on(listener)
+	}
+
+	// ==========================================================================
+	// Statistics
+	// ==========================================================================
+
 	/**
 	 * Get statistics about trace storage
 	 */
@@ -340,7 +528,19 @@ export class DarwinService {
 			state.traceCapture = null
 		}
 
+		if (state.evolutionEngine) {
+			await state.evolutionEngine.close()
+			state.evolutionEngine = null
+		}
+
+		if (state.stateManager) {
+			await state.stateManager.close()
+			state.stateManager = null
+		}
+
 		state.patternDetector = null
+		state.proposalGenerator = null
+		state.council = null
 		state.isInitialized = false
 	}
 
@@ -352,6 +552,10 @@ export class DarwinService {
 		state.config = DEFAULT_DARWIN_CONFIG
 		state.traceCapture = null
 		state.patternDetector = null
+		state.proposalGenerator = null
+		state.stateManager = null
+		state.evolutionEngine = null
+		state.council = null
 		state.workspacePath = null
 	}
 }
