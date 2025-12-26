@@ -36,6 +36,76 @@ import { DeploymentRecord } from "../api/providers/fetchers/sap-ai-core"
 import { STTSegment } from "./sttContract" // kilocode_change: STT segment type
 // kilocode_change end
 
+export interface DarwinAnalytics {
+	health: {
+		status: "healthy" | "degraded" | "unhealthy"
+		components: { name: string; status: string }[]
+		lastUpdate: string
+	}
+
+	execution: {
+		proposalsToday: number
+		proposalsWeek: number
+		proposalsTotal: number
+		autoApproved: number
+		manuallyApproved: number
+		rejected: number
+		successRate: number
+		queueDepth: number
+	}
+
+	skills: {
+		totalSkills: number
+		synthesizedToday: number
+		synthesizedWeek: number
+		topSkills: { id: string; name: string; usageCount: number }[]
+		avgSuccessRate: number
+		synthesisMethodBreakdown: { template: number; llm: number; hybrid: number }
+	}
+
+	council: {
+		reviewsTotal: number
+		avgReviewTime: number
+		decisions: { approved: number; rejected: number; deferred: number }
+		multiAgentEnabled: boolean
+	}
+
+	costs?: {
+		tokensToday: number
+		tokensWeek: number
+		estimatedCost: number
+	}
+
+	recentActivity: {
+		proposals: RecentProposal[]
+		skills: RecentSkill[]
+		reviews: RecentReview[]
+	}
+}
+
+export interface RecentProposal {
+	id: string
+	title: string
+	status: "pending" | "approved" | "rejected" | "applied"
+	timestamp: string
+	type: string
+}
+
+export interface RecentSkill {
+	id: string
+	name: string
+	synthesisMethod: "template" | "llm" | "hybrid"
+	timestamp: string
+}
+
+export interface RecentReview {
+	id: string
+	proposalId: string
+	decision: "approved" | "rejected" | "deferred"
+	timestamp: string
+	reviewerCount: number
+}
+
 // Command interface for frontend/backend communication
 export interface Command {
 	name: string
@@ -196,6 +266,7 @@ export interface ExtensionMessage {
 		| "deviceAuthFailed" // kilocode_change: Device auth failed
 		| "deviceAuthCancelled" // kilocode_change: Device auth cancelled
 		| "chatCompletionResult" // kilocode_change: FIM completion result for chat text area
+		| "darwinAnalyticsUpdate" // kilocode_change: Darwin analytics data update
 	text?: string
 	// kilocode_change start
 	completionRequestId?: string // Correlation ID from request
@@ -360,6 +431,9 @@ export interface ExtensionMessage {
 	deviceAuthUserEmail?: string
 	deviceAuthError?: string
 	// kilocode_change end: Device auth data
+	// kilocode_change start: Darwin analytics
+	darwinAnalytics?: DarwinAnalytics
+	// kilocode_change end: Darwin analytics
 }
 
 export type ExtensionState = Pick<

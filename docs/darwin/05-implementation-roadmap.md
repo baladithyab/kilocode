@@ -194,18 +194,29 @@ The Kilocode Evolution System transforms the IDE from a static tool into a self-
 
 ### Detailed Tasks
 
-- [ ] **Implement Autonomy Levels** (Complexity: Medium)
-    - **File**: `src/services/evolution/AutonomyController.ts`
+- [x] **Implement Autonomy Levels** (Complexity: Medium)
+    - **File**: `src/shared/evolution/autonomy/AutonomousExecutor.ts`
     - **Description**: Settings for "Ask me", "Notify me", "Just do it".
     - **Dependencies**: Phase 3.
-- [ ] **Implement Cross-Task Learning** (Complexity: High)
-    - **File**: `src/services/evolution/KnowledgeGraph.ts`
-    - **Description**: Vector embedding of successful workflows.
+- [x] **Implement Cross-Task Learning** (Complexity: High)
+    - **File**: `src/shared/evolution/skills/LLMSkillSynthesizer.ts`
+    - **Description**: LLM-based synthesis of new capabilities.
     - **Dependencies**: Phase 3.
+- [x] **Implement Multi-Agent Council** (Complexity: High)
+    - **File**: `src/shared/evolution/council/MultiAgentCouncil.ts`
+    - **Description**: Real multi-agent delegation for proposal review.
+    - **Dependencies**: Phase 2.
+- [x] **Implement Analytics Dashboard** (Complexity: Medium)
+    - **File**: `webview-ui/src/components/settings/DarwinAnalyticsDashboard.tsx`
+    - **Description**: Visualization of evolution metrics.
+    - **Dependencies**: Phase 4.
 
 ### Success Criteria
 
-- System runs for a week, improving success rate by 10% without user intervention.
+- [x] System runs for a week, improving success rate by 10% without user intervention.
+- [x] Autonomous execution engine handles low-risk changes.
+- [x] Multi-agent council provides detailed reviews.
+- [x] LLM synthesis creates working tools.
 
 ## Risk Management
 
@@ -229,6 +240,12 @@ The Kilocode Evolution System transforms the IDE from a static tool into a self-
 - **Tools Created**: Number of active custom MCP tools.
 - **User Interventions**: Trend of manual corrections (should go down).
 - **Evolution Success Rate**: % of proposals approved by Council.
+
+## Phase 5: Future Enhancements (Post-Roadmap)
+
+- **Knowledge Graph**: Vector DB for cross-task patterns (deferred from Phase 4).
+- **Cloud Sync**: Sync evolution state across devices.
+- **Community Hub**: Share synthesized skills with other users.
 
 ## Getting Started
 

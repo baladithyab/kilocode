@@ -218,3 +218,6 @@ const dynamicProviderExtras = {
 export type GetModelsOptions = {
 	[P in keyof typeof dynamicProviderExtras]: ({ provider: P } & (typeof dynamicProviderExtras)[P]) & CommonFetchParams
 }[RouterName]
+
+// kilocode_change: Re-export model cache functions to avoid circular dependency issues in webviewMessageHandler
+export { getModels, flushModels } from "../api/providers/fetchers/modelCache"

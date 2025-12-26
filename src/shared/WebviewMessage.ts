@@ -288,6 +288,7 @@ export interface WebviewMessage {
 		| "deviceAuthCompleteWithProfile" // kilocode_change: Device auth complete with specific profile
 		| "requestChatCompletion" // kilocode_change: Request FIM completion for chat text area
 		| "chatCompletionAccepted" // kilocode_change: User accepted a chat completion suggestion
+		| "getDarwinAnalytics" // kilocode_change: Request Darwin analytics data
 	text?: string
 	suggestionLength?: number // kilocode_change: Length of accepted suggestion for telemetry
 	completionRequestId?: string // kilocode_change

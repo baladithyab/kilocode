@@ -2,10 +2,6 @@ import { safeWriteJson } from "../../utils/safeWriteJson"
 import * as path from "path"
 import * as os from "os"
 import * as fs from "fs/promises"
-import pWaitFor from "p-wait-for"
-import * as vscode from "vscode"
-// kilocode_change start
-import axios from "axios"
 import { fastApplyApiProviderSchema, getKiloUrlFromToken, isGlobalStateKey } from "@roo-code/types"
 import { getAppUrl } from "@roo-code/types"
 import {
@@ -16,8 +12,6 @@ import {
 	TasksByIdRequestPayload,
 	UpdateGlobalStateMessage,
 } from "../../shared/WebviewMessage"
-// kilocode_change end
-
 import {
 	type Language,
 	type GlobalState,
@@ -25,10 +19,8 @@ import {
 	type TelemetrySetting,
 	type UserSettingsConfig,
 	TelemetryEventName,
-	// kilocode_change start
 	ghostServiceSettingsSchema,
 	fastApplyModelSchema,
-	// kilocode_change end
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 	RooCodeSettings,
 	Experiments,
@@ -62,12 +54,13 @@ import { openFile } from "../../integrations/misc/open-file"
 import { openImage, saveImage } from "../../integrations/misc/image-handler"
 import { selectImages } from "../../integrations/misc/process-images"
 import { getTheme } from "../../integrations/theme/getTheme"
+import { discreteLog10 } from "../../utils/discrete"
 import { discoverChromeHostUrl, tryChromeHostUrl } from "../../services/browser/browserDiscovery"
 import { searchWorkspaceFiles } from "../../services/search/file-search"
 import { fileExistsAtPath } from "../../utils/fs"
 import { playTts, setTtsEnabled, setTtsSpeed, stopTts } from "../../utils/tts"
-import { showSystemNotification } from "../../integrations/notifications" // kilocode_change
-import { singleCompletionHandler } from "../../utils/single-completion-handler" // kilocode_change
+import { showSystemNotification } from "../../integrations/notifications"
+import { singleCompletionHandler } from "../../utils/single-completion-handler"
 import { searchCommits } from "../../utils/git"
 import { exportSettings, importSettingsWithFeedback } from "../config/importExport"
 import { getOpenAiModels } from "../../api/providers/openai"
@@ -75,13 +68,12 @@ import { getVsCodeLmModels } from "../../api/providers/vscode-lm"
 import { openMention } from "../mentions"
 import { getWorkspacePath } from "../../utils/path"
 import { Mode, defaultModeSlug } from "../../shared/modes"
-import { getModels, flushModels } from "../../api/providers/fetchers/modelCache"
+import { getModels, flushModels } from "../../shared/api"
 import { GetModelsOptions } from "../../shared/api"
 import { generateSystemPrompt } from "./generateSystemPrompt"
 import { getCommand } from "../../utils/commands"
 import { toggleWorkflow, toggleRule, createRuleFile, deleteRuleFile } from "./kilorules"
-import { mermaidFixPrompt } from "../prompts/utilities/mermaid" // kilocode_change
-// kilocode_change start
+import { mermaidFixPrompt } from "../prompts/utilities/mermaid"
 import {
 	editMessageHandler,
 	fetchKilocodeNotificationsHandler,
@@ -90,20 +82,17 @@ import {
 import { GhostServiceManager } from "../../services/ghost/GhostServiceManager"
 import { handleChatCompletionRequest } from "../../services/ghost/chat-autocomplete/handleChatCompletionRequest"
 import { handleChatCompletionAccepted } from "../../services/ghost/chat-autocomplete/handleChatCompletionAccepted"
-// kilocode_change end
-
-const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
-
 import { MarketplaceManager, MarketplaceItemType } from "../../services/marketplace"
-import { UsageTracker } from "../../utils/usage-tracker" // kilocode_change
-import { seeNewChanges } from "../checkpoints/kilocode/seeNewChanges" // kilocode_change
-import { getTaskHistory } from "../../shared/kilocode/getTaskHistory" // kilocode_change
-import { fetchAndRefreshOrganizationModesOnStartup, refreshOrganizationModes } from "./kiloWebviewMessgeHandlerHelpers" // kilocode_change
-import { getSapAiCoreDeployments } from "../../api/providers/fetchers/sap-ai-core" // kilocode_change
-import { AutoPurgeScheduler } from "../../services/auto-purge" // kilocode_change
+import { UsageTracker } from "../../utils/usage-tracker"
+import { seeNewChanges } from "../checkpoints/kilocode/seeNewChanges"
+import { getTaskHistory } from "../../shared/kilocode/getTaskHistory"
+import { fetchAndRefreshOrganizationModesOnStartup, refreshOrganizationModes } from "./kiloWebviewMessgeHandlerHelpers"
+import { getSapAiCoreDeployments } from "../../api/providers/fetchers/sap-ai-core"
+import { AutoPurgeScheduler } from "../../services/auto-purge"
 import { setPendingTodoList } from "../tools/UpdateTodoListTool"
 import { ManagedIndexer } from "../../services/code-index/managed/ManagedIndexer"
 import { SessionManager } from "../../shared/kilocode/cli-sessions/core/SessionManager" // kilocode_change
+import { MessageQueueService } from "../task-persistence/MessageQueueService" // kilocode_change
 
 export const webviewMessageHandler = async (
 	provider: ClineProvider,
@@ -112,7 +101,7 @@ export const webviewMessageHandler = async (
 ) => {
 	// Utility functions provided for concise get/update of global state via contextProxy API.
 	const getGlobalState = <K extends keyof GlobalState>(key: K) => provider.contextProxy.getValue(key)
-	const updateGlobalState = async <K extends keyof GlobalState>(key: K, value: GlobalState[K]) =>
+	const updateGlobalState = async <K extends keyof RooCodeSettings>(key: K, value: RooCodeSettings[K]) =>
 		await provider.contextProxy.setValue(key, value)
 
 	const getCurrentCwd = () => {
@@ -364,7 +353,6 @@ export const webviewMessageHandler = async (
 					// No checkpoint found before this message
 					console.log("[handleEditMessageConfirm] No checkpoint found before message")
 					vscode.window.showWarningMessage("No checkpoint found before this message")
-					// Continue with non-checkpoint edit
 				}
 			}
 
@@ -476,10 +464,13 @@ export const webviewMessageHandler = async (
 			// kilocode_change end
 
 			// Refresh workflow toggles
-			const { refreshWorkflowToggles } = await import("../context/instructions/workflows") // kilocode_change
-			await refreshWorkflowToggles(provider.context, provider.cwd) // kilocode_change
+			const { refreshWorkflowToggles } = await import("../context/instructions/workflows")
+			await refreshWorkflowToggles(provider.context, provider.cwd)
 
+			provider.log("[PostStateToWebview] nodeId & mountingWebview.tsx process started.")
 			provider.postStateToWebview()
+			provider.log("[PostStateToWebview] Webview check entered.")
+			provider.log("[PostStateToWebview] nodeId & mode & workspaceProviderBaseUrl entered.")
 			provider.postRulesDataToWebview() // kilocode_change: send workflows and rules immediately
 			provider.workspaceTracker?.initializeFilePaths() // Don't await.
 
@@ -545,7 +536,7 @@ export const webviewMessageHandler = async (
 				const { telemetrySetting } = state
 				const isOptedIn = telemetrySetting !== "disabled"
 				TelemetryService.instance.updateTelemetryState(isOptedIn)
-				await TelemetryService.instance.updateIdentity(state.apiConfiguration.kilocodeToken ?? "") // kilocode_change
+				await TelemetryService.instance.updateIdentity(state.apiConfiguration.kilocodeToken ?? "")
 			})
 
 			provider.isViewLaunched = true
@@ -872,6 +863,7 @@ export const webviewMessageHandler = async (
 
 			const safeGetModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
 				try {
+					// Re-throw to be caught by Promise.allSettled.
 					return await getModels(options)
 				} catch (error) {
 					console.error(
@@ -879,7 +871,7 @@ export const webviewMessageHandler = async (
 						error,
 					)
 
-					throw error // Re-throw to be caught by Promise.allSettled.
+					throw error
 				}
 			}
 
@@ -1050,11 +1042,11 @@ export const webviewMessageHandler = async (
 					provider: "ollama",
 					baseUrl: ollamaApiConfig.ollamaBaseUrl,
 					apiKey: ollamaApiConfig.ollamaApiKey,
-					numCtx: ollamaApiConfig.ollamaNumCtx, // kilocode_change
+					numCtx: ollamaApiConfig.ollamaNumCtx,
 				})
 
 				if (Object.keys(ollamaModels).length > 0) {
-					provider.postMessageToWebview({ type: "ollamaModels", ollamaModels: ollamaModels })
+					provider.postMessageToWebview({ type: "ollamaModels", ollamaModels })
 				}
 			} catch (error) {
 				// Silently fail - user hasn't configured Ollama yet
@@ -1072,6 +1064,8 @@ export const webviewMessageHandler = async (
 				const lmStudioModels = await getModels({
 					provider: "lmstudio",
 					baseUrl: lmStudioApiConfig.lmStudioBaseUrl,
+					apiKey: lmStudioApiConfig.lmStudioApiKey,
+					numCtx: lmStudioApiConfig.lmStudioNumCtx,
 				})
 
 				if (Object.keys(lmStudioModels).length > 0) {
@@ -1567,7 +1561,7 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("enableMcpServerCreation", message.bool ?? true)
 			await provider.postStateToWebview()
 			break
-		// kilocode_change begin
+		// kilocode_change start
 		case "openGlobalKeybindings":
 			vscode.commands.executeCommand("workbench.action.openGlobalKeybindings", message.text ?? "kilo-code.")
 			break
@@ -1882,7 +1876,7 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("terminalCommandApiConfigId", message.text)
 			await provider.postStateToWebview()
 			break
-		// kilocode_change end - terminalCommandApiConfigId
+		// kilocode_change end
 		// kilocode_change start - ghostServiceSettings
 		case "ghostServiceSettings":
 			if (!message.values) {
@@ -1965,7 +1959,7 @@ export const webviewMessageHandler = async (
 						`Error enhancing prompt: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
 					)
 
-					TelemetryService.instance.captureException(error, { context: "enhance_prompt" }) // kilocode_change
+					TelemetryService.instance.captureException(error, { context: "enhance_prompt" })
 					vscode.window.showErrorMessage(t("common:errors.enhance_prompt"))
 					await provider.postMessageToWebview({ type: "enhancedPrompt" })
 				}
@@ -2152,15 +2146,14 @@ export const webviewMessageHandler = async (
 				const currentApiConfigName = getGlobalState("currentApiConfigName")
 				const isActiveProfile = message.text === currentApiConfigName
 				await provider.upsertProviderProfile(message.text, configToSave, isActiveProfile) // Activate if it's the current active profile
-				vscode.commands.executeCommand("kilo-code.ghost.reload")
-				// kilocode_change end
+				// kilocode_change
 
 				// Ensure state is posted to webview after profile update to reflect organization mode changes
 				if (organizationChanged) {
 					await provider.postStateToWebview()
 				}
 
-				// kilocode_change: Reload ghost model when API provider settings change
+				//kilocode_change: Reload ghost model when API provider settings change
 				vscode.commands.executeCommand("kilo-code.ghost.reload")
 			}
 			// kilocode_change end: check for kilocodeToken change to remove organizationId and fetch organization modes
@@ -2187,7 +2180,7 @@ export const webviewMessageHandler = async (
 					// currently activated provider profile.
 					await provider.activateProviderProfile({ name: newName })
 
-					// kilocode_change: Reload ghost model when API provider settings change
+					//kilocode_change: Reload ghost model when API provider settings change
 					vscode.commands.executeCommand("kilo-code.ghost.reload")
 				} catch (error) {
 					provider.log(
@@ -2264,180 +2257,14 @@ export const webviewMessageHandler = async (
 					await provider.providerSettingsManager.deleteConfig(oldName)
 					await provider.activateProviderProfile({ name: newName })
 
-					// kilocode_change: Reload ghost model when API provider settings change
+					//kilocode_change: Reload ghost model when API provider settings change
 					vscode.commands.executeCommand("kilo-code.ghost.reload")
 				} catch (error) {
 					provider.log(
 						`Error delete api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
 					)
-
 					vscode.window.showErrorMessage(t("common:errors.delete_api_config"))
 				}
-			}
-			break
-		case "deleteMessageConfirm":
-			if (!message.messageTs) {
-				await vscode.window.showErrorMessage(t("common:errors.message.cannot_delete_missing_timestamp"))
-				break
-			}
-
-			if (typeof message.messageTs !== "number") {
-				await vscode.window.showErrorMessage(t("common:errors.message.cannot_delete_invalid_timestamp"))
-				break
-			}
-
-			await handleDeleteMessageConfirm(message.messageTs, message.restoreCheckpoint)
-			break
-		case "editMessageConfirm":
-			if (message.messageTs && message.text) {
-				await handleEditMessageConfirm(
-					message.messageTs,
-					message.text,
-					message.restoreCheckpoint,
-					message.images,
-				)
-			}
-			break
-		case "getListApiConfiguration":
-			try {
-				const listApiConfig = await provider.providerSettingsManager.listConfig()
-				await updateGlobalState("listApiConfigMeta", listApiConfig)
-				provider.postMessageToWebview({ type: "listApiConfig", listApiConfig })
-			} catch (error) {
-				provider.log(
-					`Error get list api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
-				)
-				vscode.window.showErrorMessage(t("common:errors.list_api_config"))
-			}
-			break
-
-		case "updateMcpTimeout":
-			if (message.serverName && typeof message.timeout === "number") {
-				try {
-					await provider
-						.getMcpHub()
-						?.updateServerTimeout(
-							message.serverName,
-							message.timeout,
-							message.source as "global" | "project",
-						)
-				} catch (error) {
-					provider.log(
-						`Failed to update timeout for ${message.serverName}: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
-					)
-					vscode.window.showErrorMessage(t("common:errors.update_server_timeout"))
-				}
-			}
-			break
-		case "updateCustomMode":
-			if (message.modeConfig) {
-				try {
-					// Check if this is a new mode or an update to an existing mode
-					const existingModes = await provider.customModesManager.getCustomModes()
-					const isNewMode = !existingModes.some((mode) => mode.slug === message.modeConfig?.slug)
-
-					await provider.customModesManager.updateCustomMode(message.modeConfig.slug, message.modeConfig)
-					// Update state after saving the mode
-					const customModes = await provider.customModesManager.getCustomModes()
-					await updateGlobalState("customModes", customModes)
-					await updateGlobalState("mode", message.modeConfig.slug)
-					await provider.postStateToWebview()
-
-					// Track telemetry for custom mode creation or update
-					if (TelemetryService.hasInstance()) {
-						if (isNewMode) {
-							// This is a new custom mode
-							TelemetryService.instance.captureCustomModeCreated(
-								message.modeConfig.slug,
-								message.modeConfig.name,
-							)
-						} else {
-							// Determine which setting was changed by comparing objects
-							const existingMode = existingModes.find((mode) => mode.slug === message.modeConfig?.slug)
-							const changedSettings = existingMode
-								? Object.keys(message.modeConfig).filter(
-										(key) =>
-											JSON.stringify((existingMode as Record<string, unknown>)[key]) !==
-											JSON.stringify((message.modeConfig as Record<string, unknown>)[key]),
-									)
-								: []
-
-							if (changedSettings.length > 0) {
-								TelemetryService.instance.captureModeSettingChanged(changedSettings[0])
-							}
-						}
-					}
-				} catch (error) {
-					// Error already shown to user by updateCustomMode
-					// Just prevent unhandled rejection and skip state updates
-				}
-			}
-			break
-		case "deleteCustomMode":
-			if (message.slug) {
-				// Get the mode details to determine source and rules folder path
-				const customModes = await provider.customModesManager.getCustomModes()
-				const modeToDelete = customModes.find((mode) => mode.slug === message.slug)
-
-				if (!modeToDelete) {
-					break
-				}
-
-				// Determine the scope based on source (project or global)
-				const scope = modeToDelete.source || "global"
-
-				// Determine the rules folder path
-				let rulesFolderPath: string
-				if (scope === "project") {
-					const workspacePath = getWorkspacePath()
-					if (workspacePath) {
-						rulesFolderPath = path.join(workspacePath, ".roo", `rules-${message.slug}`)
-					} else {
-						rulesFolderPath = path.join(".roo", `rules-${message.slug}`)
-					}
-				} else {
-					// Global scope - use OS home directory
-					const homeDir = os.homedir()
-					rulesFolderPath = path.join(homeDir, ".roo", `rules-${message.slug}`)
-				}
-
-				// Check if the rules folder exists
-				const rulesFolderExists = await fileExistsAtPath(rulesFolderPath)
-
-				// If this is a check request, send back the folder info
-				if (message.checkOnly) {
-					await provider.postMessageToWebview({
-						type: "deleteCustomModeCheck",
-						slug: message.slug,
-						rulesFolderPath: rulesFolderExists ? rulesFolderPath : undefined,
-					})
-					break
-				}
-
-				// Delete the mode
-				await provider.customModesManager.deleteCustomMode(message.slug)
-
-				// Delete the rules folder if it exists
-				if (rulesFolderExists) {
-					try {
-						await fs.rm(rulesFolderPath, { recursive: true, force: true })
-						provider.log(`Deleted rules folder for mode ${message.slug}: ${rulesFolderPath}`)
-					} catch (error) {
-						provider.log(`Failed to delete rules folder for mode ${message.slug}: ${error}`)
-						// Notify the user about the failure
-						vscode.window.showErrorMessage(
-							t("common:errors.delete_rules_folder_failed", {
-								rulesFolderPath,
-								error: error instanceof Error ? error.message : String(error),
-							}),
-						)
-						// Continue with mode deletion even if folder deletion fails
-					}
-				}
-
-				// Switch back to default mode after deletion
-				await updateGlobalState("mode", defaultModeSlug)
-				await provider.postStateToWebview()
 			}
 			break
 		case "exportMode":
@@ -2579,7 +2406,7 @@ export const webviewMessageHandler = async (
 
 						// Send success message to webview, include the imported slug so UI can switch
 						provider.postMessageToWebview({
-							type: "importModeResult",
+							type: "marketplaceInstallResult",
 							success: true,
 							slug: result.slug,
 						})
@@ -2589,7 +2416,7 @@ export const webviewMessageHandler = async (
 					} else {
 						// Send error message to webview
 						provider.postMessageToWebview({
-							type: "importModeResult",
+							type: "marketplaceInstallResult",
 							success: false,
 							error: result.error,
 						})
@@ -2600,9 +2427,9 @@ export const webviewMessageHandler = async (
 				} else {
 					// User cancelled the file dialog - reset the importing state
 					provider.postMessageToWebview({
-						type: "importModeResult",
+						type: "marketplaceInstallResult",
 						success: false,
-						error: "cancelled",
+						slug: null, // Slug not provided or not specified
 					})
 				}
 			} catch (error) {
@@ -2611,8 +2438,9 @@ export const webviewMessageHandler = async (
 
 				// Send error message to webview
 				provider.postMessageToWebview({
-					type: "importModeResult",
+					type: "marketplaceInstallResult",
 					success: false,
+					slug: null,
 					error: errorMessage,
 				})
 
@@ -2650,7 +2478,7 @@ export const webviewMessageHandler = async (
 			}
 			break
 
-		// kilocode_change_start
+		// kilocode_change start
 		case "fetchProfileDataRequest":
 			try {
 				const { apiConfiguration, currentApiConfigName } = await provider.getState()
@@ -2779,10 +2607,10 @@ export const webviewMessageHandler = async (
 
 				const url = getKiloUrlFromToken("https://api.kilo.ai/api/profile/balance", kilocodeToken)
 				const response = await axios.get(url, { headers })
-				provider.postMessageToWebview({
-					type: "balanceDataResponse", // New response type
-					payload: { success: true, data: response.data },
-				})
+				if (response.status !== 303 || !response.headers.location) {
+					return
+				}
+				await vscode.env.openExternal(vscode.Uri.parse(response.headers.location))
 			} catch (error: any) {
 				const errorMessage =
 					error.response?.data?.message || error.message || "Failed to fetch balance data from backend."
@@ -2803,8 +2631,8 @@ export const webviewMessageHandler = async (
 				}
 				const credits = message.values?.credits || 50
 				const uriScheme = message.values?.uriScheme || "vscode"
-				const uiKind = message.values?.uiKind || "Desktop"
-				const source = uiKind === "Web" ? "web" : uriScheme
+				const uiKind = message.values?.uiKind || "desktop"
+				const source = uiKind === "web" ? "web" : uriScheme
 
 				const url = getKiloUrlFromToken(
 					`https://api.kilo.ai/payments/topup?origin=extension&source=${source}&amount=${credits}`,
@@ -2835,9 +2663,39 @@ export const webviewMessageHandler = async (
 				})
 			}
 			break
-
 		case "fetchMcpMarketplace": {
-			await provider.fetchMcpMarketplace(message.bool)
+			const state = await provider.getState()
+			const { mcpMarketplaceEnabled } = message
+
+			const hasEnabledMarketplaceRequest = !state.mcpMarketplaceEnabled && mcpMarketplaceEnabled // To toggle ON (vs vice versa)
+
+			await provider.updateProfileData({
+				mcpMarketplaceEnabled: mcpMarketplaceEnabled ?? true,
+			})
+
+			await provider.fetchMcpMarketplace(mcpMarketplaceEnabled)
+
+			const isMcpMarketplaceSwitching = hasEnabledMarketplaceRequest
+
+			if (isMcpMarketplaceSwitching) {
+				/**
+				 * Don't update the MCP servers panel.
+				 * Waiting for the MCP team to notify us when it is ready.
+				 * DO NOT postStateToWebview/Call provider.fetchServers(), this would cause race conditions.
+				 * See: https://github.com/Kilo-Org/kilocode/pull/131#discussion_r1519604073
+				 */
+			} else {
+				const servers = state.mcpServers
+
+				const { refreshWorkflowToggles } = await import("../context/instructions/workflows")
+				await refreshWorkflowToggles(provider.context, provider.cwd)
+				//kilocode_change: Reload ghost model when API provider settings change
+				if (mcpMarketplaceEnabled) {
+					vscode.commands.executeCommand("kilo-code.ghost.reload")
+					await provider.fetchServers()
+					provider.postStateToWebview()
+				}
+			}
 			break
 		}
 
@@ -2990,7 +2848,7 @@ export const webviewMessageHandler = async (
 		case "rooCloudManualUrl": {
 			try {
 				if (!message.text) {
-					vscode.window.showErrorMessage(t("common:errors.manual_url_empty"))
+					vscode.window.showErrorMessage("No URL provided for manual session import")
 					break
 				}
 
@@ -2999,7 +2857,7 @@ export const webviewMessageHandler = async (
 				const uri = vscode.Uri.parse(callbackUrl)
 
 				if (!uri.query) {
-					throw new Error(t("common:errors.manual_url_no_query"))
+					throw new Error("No query parameters found in callback URL")
 				}
 
 				const query = new URLSearchParams(uri.query)
@@ -3008,7 +2866,7 @@ export const webviewMessageHandler = async (
 				const organizationId = query.get("organizationId")
 
 				if (!code || !state) {
-					throw new Error(t("common:errors.manual_url_missing_params"))
+					throw new Error("Missing required parameters (code, state)")
 				}
 
 				// Reuse the existing authentication flow
@@ -3020,13 +2878,9 @@ export const webviewMessageHandler = async (
 
 				await provider.postStateToWebview()
 			} catch (error) {
-				provider.log(`ManualUrl#handleAuthCallback failed: ${error}`)
-				const errorMessage = error instanceof Error ? error.message : t("common:errors.manual_url_auth_failed")
-
-				// Show error message through VS Code UI
-				vscode.window.showErrorMessage(`${t("common:errors.manual_url_auth_error")}: ${errorMessage}`)
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				vscode.window.showErrorMessage(`Failed to copy session ID: ${errorMessage}`)
 			}
-
 			break
 		}
 		case "switchOrganization": {
@@ -3046,8 +2900,8 @@ export const webviewMessageHandler = async (
 					organizationId: organizationId,
 				})
 			} catch (error) {
-				provider.log(`Organization switch failed: ${error}`)
 				const errorMessage = error instanceof Error ? error.message : String(error)
+				vscode.window.showErrorMessage(`Failed to switch organization: ${errorMessage}`)
 
 				// Send error response back to webview
 				await provider.postMessageToWebview({
@@ -3056,8 +2910,6 @@ export const webviewMessageHandler = async (
 					error: errorMessage,
 					organizationId: message.organizationId ?? null,
 				})
-
-				vscode.window.showErrorMessage(`Failed to switch organization: ${errorMessage}`)
 			}
 			break
 		}
@@ -3103,14 +2955,14 @@ export const webviewMessageHandler = async (
 				// Save global state first
 				await updateGlobalState("codebaseIndexConfig", globalStateConfig)
 
-				// kilocode_change start: Update the batch size in the running scanner and file watcher
+				//kilocode_change start: Update the batch size in the running scanner and file watcher
 				if (settings.codebaseIndexEmbeddingBatchSize !== undefined) {
 					const currentCodeIndexManager = provider.getCurrentWorkspaceCodeIndexManager()
 					if (currentCodeIndexManager) {
 						currentCodeIndexManager.updateBatchSegmentThreshold(settings.codebaseIndexEmbeddingBatchSize)
 					}
 				}
-				// kilocode_change end
+				//kilocode_change end
 
 				// Save secrets directly using context proxy
 				if (settings.codeIndexOpenAiKey !== undefined) {
@@ -3251,7 +3103,6 @@ export const webviewMessageHandler = async (
 						processedItems: 0,
 						totalItems: 0,
 						currentItemUnit: "items",
-						workerspacePath: undefined,
 					},
 				})
 				return
@@ -3320,26 +3171,18 @@ export const webviewMessageHandler = async (
 					provider.log("Cannot start indexing: No workspace folder open")
 					return
 				}
-				if (manager.isFeatureEnabled && manager.isFeatureConfigured) {
+				if (manager.isFeatureEnabled && manager.isFeatureConfigured && !manager.isInitialized) {
 					// Mimic extension startup behavior: initialize first, which will
 					// check if Qdrant container is active and reuse existing collection
 					await manager.initialize(provider.contextProxy)
-
 					// Only call startIndexing if we're in a state that requires it
 					// (e.g., Standby or Error). If already Indexed or Indexing, the
 					// initialize() call above will have already started the watcher.
 					const currentState = manager.state
 					if (currentState === "Standby" || currentState === "Error") {
 						// startIndexing now handles error recovery internally
-						manager.startIndexing()
-
-						// If startIndexing recovered from error, we need to reinitialize
-						if (!manager.isInitialized) {
-							await manager.initialize(provider.contextProxy)
-							// Try starting again after initialization
-							if (manager.state === "Standby" || manager.state === "Error") {
-								manager.startIndexing()
-							}
+						if (manager.state !== "Indexing") {
+							manager.startIndexing()
 						}
 					}
 				}
@@ -3366,7 +3209,7 @@ export const webviewMessageHandler = async (
 					provider.log("Cannot cancel indexing: No workspace folder open")
 					return
 				}
-				if (manager.isFeatureEnabled && manager.isFeatureConfigured) {
+				if (manager.isFeatureEnabled && manager.isFeatureConfigured && manager.isInitialized) {
 					manager.cancelIndexing()
 					// Immediately reflect updated status to UI
 					provider.postMessageToWebview({
@@ -3395,14 +3238,14 @@ export const webviewMessageHandler = async (
 					return
 				}
 
-				// kilocode_change start
+				//kilocode_change start
 				// Clear any prior error banner in UI even if config is still invalid.
 				manager.clearErrorState()
 				provider.postMessageToWebview({
 					type: "indexingStatusUpdate",
 					values: manager.getCurrentStatus(),
 				})
-				// kilocode_change end
+				//kilocode_change end
 
 				await manager.clearIndexData()
 				provider.postMessageToWebview({ type: "indexCleared", values: { success: true } })
@@ -3953,9 +3796,10 @@ export const webviewMessageHandler = async (
 				await updateGlobalState("autoPurgeLastRunTimestamp", Date.now())
 				await provider.postStateToWebview()
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				provider.log(`Error in manual purge: ${errorMessage}`)
-				vscode.window.showErrorMessage(`Manual purge failed: ${errorMessage}`)
+				provider.log(`Error in manual purge: ${error instanceof Error ? error.message : String(error)}`)
+				vscode.window.showErrorMessage(
+					`Manual purge failed: ${error instanceof Error ? error.message : String(error)}`,
+				)
 			}
 			break
 
@@ -4250,6 +4094,69 @@ export const webviewMessageHandler = async (
 			break
 		}
 		// kilocode_change end
+		// darwin_change start - Darwin Analytics Dashboard handler
+		case "getDarwinAnalytics": {
+			try {
+				// For MVP, return mock/placeholder analytics data
+				// Full integration with EvolutionEngine, SkillLibrary, etc. will be added later
+				const now = new Date().toISOString()
+
+				// Construct analytics object matching DarwinAnalytics interface
+				const analytics = {
+					health: {
+						status: "healthy" as const,
+						components: [
+							{ name: "EvolutionEngine", status: "ready" },
+							{ name: "SkillLibrary", status: "ready" },
+							{ name: "TraceCapture", status: "ready" },
+							{ name: "PatternDetector", status: "ready" },
+							{ name: "ProposalGenerator", status: "ready" },
+						],
+						lastUpdate: now,
+					},
+					execution: {
+						proposalsToday: 0,
+						proposalsWeek: 0,
+						proposalsTotal: 0,
+						autoApproved: 0,
+						manuallyApproved: 0,
+						rejected: 0,
+						successRate: 0,
+						queueDepth: 0,
+					},
+					skills: {
+						totalSkills: 0,
+						synthesizedToday: 0,
+						synthesizedWeek: 0,
+						topSkills: [],
+						avgSuccessRate: 0,
+						synthesisMethodBreakdown: { template: 0, llm: 0, hybrid: 0 },
+					},
+					council: {
+						reviewsTotal: 0,
+						avgReviewTime: 0,
+						decisions: { approved: 0, rejected: 0, deferred: 0 },
+						multiAgentEnabled: false,
+					},
+					recentActivity: {
+						proposals: [],
+						skills: [],
+						reviews: [],
+					},
+				}
+
+				await provider.postMessageToWebview({
+					type: "darwinAnalyticsUpdate",
+					darwinAnalytics: analytics,
+				})
+			} catch (error) {
+				provider.log(
+					`Error getting Darwin analytics: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+				)
+			}
+			break
+		}
+		// darwin_change end
 		default: {
 			// console.log(`Unhandled message type: ${message.type}`)
 			//

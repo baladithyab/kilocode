@@ -15,7 +15,7 @@ import { modeConfigSchema } from "./mode.js"
 import { customModePromptsSchema, customSupportPromptsSchema } from "./mode.js"
 import { languagesSchema } from "./vscode.js"
 import { fastApplyModelSchema, ghostServiceSettingsSchema, fastApplyApiProviderSchema } from "./kilocode/kilocode.js"
-import { darwinConfigSchema, DEFAULT_DARWIN_CONFIG } from "./evolution.js"
+import { darwinConfigWithLLMSynthesisSchema, DEFAULT_DARWIN_CONFIG, DEFAULT_LLM_SYNTHESIS_CONFIG } from "./evolution.js"
 
 /**
  * Default delay in milliseconds after writes to allow diagnostics to detect potential problems.
@@ -241,7 +241,7 @@ export const globalSettingsSchema = z.object({
 	 * Darwin evolution system configuration
 	 * Enables self-improving agent capabilities
 	 */
-	darwin: darwinConfigSchema.optional(),
+	darwin: darwinConfigWithLLMSynthesisSchema.optional(),
 })
 
 export type GlobalSettings = z.infer<typeof globalSettingsSchema>
@@ -436,7 +436,13 @@ export const EVALS_SETTINGS: RooCodeSettings = {
 	customModes: [],
 
 	// kilocode_change start - Darwin evolution system defaults
-	darwin: DEFAULT_DARWIN_CONFIG,
+	darwin: {
+		...DEFAULT_DARWIN_CONFIG,
+		enableRealMultiAgent: false,
+		multiAgentTimeout: 300000,
+		maxConcurrentAgents: 4,
+		llmSynthesis: DEFAULT_LLM_SYNTHESIS_CONFIG,
+	},
 	// kilocode_change end
 }
 

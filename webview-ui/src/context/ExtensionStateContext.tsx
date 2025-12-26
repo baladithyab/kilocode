@@ -6,8 +6,8 @@ import {
 	type CustomModePrompts,
 	type ModeConfig,
 	type ExperimentId,
-	type DarwinConfig,
-	GhostServiceSettings, // kilocode_change
+	type DarwinConfigWithLLMSynthesis as DarwinConfig,
+	GhostServiceSettings, // kilocode_change: Use extended config
 	openRouterDefaultModelId, // kilocode_change
 	type TodoItem,
 	type TelemetrySetting,

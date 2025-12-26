@@ -4,7 +4,12 @@ import { useAppTranslation } from "@/i18n/TranslationContext"
 import { VSCodeCheckbox, VSCodeDropdown, VSCodeOption } from "@vscode/webview-ui-toolkit/react"
 import { Sparkles, AlertTriangle } from "lucide-react"
 
-import { type DarwinConfig, type AutonomyLevel, AUTONOMY_LABELS, DEFAULT_DARWIN_CONFIG } from "@roo-code/types"
+import {
+	type DarwinConfigWithLLMSynthesis as DarwinConfig,
+	type AutonomyLevel,
+	AUTONOMY_LABELS,
+	DEFAULT_DARWIN_CONFIG,
+} from "@roo-code/types"
 
 import { SetCachedStateField } from "./types"
 import { SectionHeader } from "./SectionHeader"
@@ -20,14 +25,14 @@ export const DarwinSettings = ({ darwin, setCachedStateField, ...props }: Darwin
 	const { t } = useAppTranslation()
 
 	// Use defaults if darwin is undefined
-	const config = darwin ?? DEFAULT_DARWIN_CONFIG
+	const config = (darwin ?? DEFAULT_DARWIN_CONFIG) as any
 
 	// Helper to update a single field in the darwin config
 	const setDarwinField = <K extends keyof DarwinConfig>(field: K, value: DarwinConfig[K]) => {
 		setCachedStateField("darwin", {
 			...config,
 			[field]: value,
-		})
+		} as any)
 	}
 
 	return (

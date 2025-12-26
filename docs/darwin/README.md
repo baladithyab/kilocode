@@ -13,13 +13,15 @@ Darwin enables Kilocode to:
 
 ## Documentation Structure
 
-| Document                                                       | Description                                                                                                   |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [01-analysis.md](./01-analysis.md)                             | Initial analysis of Darwin patterns and how they map to Kilocode's architecture                               |
-| [02-architecture.md](./02-architecture.md)                     | Detailed architectural design including components, data schemas, and sequence diagrams                       |
-| [03-advanced-capabilities.md](./03-advanced-capabilities.md)   | Advanced capabilities including Anthropic's Skills pattern, configuration evolution, and local mode overrides |
-| [04-unified-architecture.md](./04-unified-architecture.md)     | Unified architecture combining all concepts into a cohesive system design                                     |
-| [05-implementation-roadmap.md](./05-implementation-roadmap.md) | Phased implementation plan with tasks, testing requirements, and success criteria                             |
+| Document                                                                   | Description                                                                                                   |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [01-analysis.md](./01-analysis.md)                                         | Initial analysis of Darwin patterns and how they map to Kilocode's architecture                               |
+| [02-architecture.md](./02-architecture.md)                                 | Detailed architectural design including components, data schemas, and sequence diagrams                       |
+| [03-advanced-capabilities.md](./03-advanced-capabilities.md)               | Advanced capabilities including Anthropic's Skills pattern, configuration evolution, and local mode overrides |
+| [04-unified-architecture.md](./04-unified-architecture.md)                 | Unified architecture combining all concepts into a cohesive system design                                     |
+| [05-implementation-roadmap.md](./05-implementation-roadmap.md)             | Phased implementation plan with tasks, testing requirements, and success criteria                             |
+| [06-phase4-autonomy-architecture.md](./06-phase4-autonomy-architecture.md) | Detailed architecture for Phase 4: Autonomous Execution, Multi-Agent Council, and LLM Synthesis               |
+| [07-phase4-usage-guide.md](./07-phase4-usage-guide.md)                     | User guide for configuring and using Phase 4 features                                                         |
 
 ## Reading Order
 
@@ -30,6 +32,8 @@ For the best understanding, read the documents in numerical order:
 3. **Advanced Capabilities** - Learn about skill synthesis and evolution strategies
 4. **Unified Architecture** - See how everything fits together
 5. **Implementation Roadmap** - Follow the step-by-step implementation plan
+6. **Phase 4 Architecture** - Understand the autonomous execution engine
+7. **Phase 4 Usage Guide** - Learn how to use the new capabilities
 
 ## Core Concepts
 

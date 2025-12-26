@@ -9,7 +9,13 @@
 export * from "./types"
 
 // Export config utilities
-export { DarwinConfig, getDarwinConfig, validateDarwinConfig } from "./config/DarwinConfig"
+export {
+	DarwinConfig,
+	getDarwinConfig,
+	validateDarwinConfig,
+	validateDarwinConfigWithMultiAgent,
+	type ExtendedDarwinConfig,
+} from "./config/DarwinConfig"
 
 // Export trace capture and storage
 export {
@@ -40,8 +46,22 @@ export {
 	type EvolutionEventListener,
 } from "./core"
 
-// Export council system
-export { Council, type CouncilDecision, type CouncilConfig, type VotingPolicy } from "./council"
+// Export council system (simulated Council + real MultiAgentCouncil)
+export {
+	Council,
+	MultiAgentCouncil,
+	createCouncil,
+	isMultiAgentCouncil,
+	getDefaultCouncil,
+	type CouncilDecision,
+	type CouncilConfig,
+	type VotingPolicy,
+	type TaskDelegator,
+	type DelegatedTaskResult,
+	type MultiAgentCouncilEvent,
+	type DarwinConfigWithMultiAgent,
+	type CreateCouncilOptions,
+} from "./council"
 
 // Export skills library (Phase 3)
 export {
@@ -49,15 +69,32 @@ export {
 	SkillValidator,
 	SkillExecutor,
 	SkillSynthesizer,
+	LLMSkillSynthesizer,
 	type SkillLibraryConfig,
 	type SkillValidatorConfig,
 	type SkillExecutorConfig,
 	type SkillSynthesizerConfig,
+	type LLMSkillSynthesizerConfig,
 	type DangerousPattern,
 } from "./skills"
 
 // Export change application (Phase 3)
 export { ChangeApplicator, type ChangeApplicatorConfig } from "./application"
+
+// Export autonomy system (Phase 4A)
+export {
+	RiskAssessor,
+	AutonomousExecutor,
+	ExecutionScheduler,
+	type RiskAssessorConfig,
+	type RiskHistoryData,
+	type ExecutionResult,
+	type BatchExecutionResult,
+	type ExecutionEventListener,
+	type SchedulerStatus,
+	type SchedulerEventListener,
+	type SchedulerStats,
+} from "./autonomy"
 
 // Export main service
 export { DarwinService } from "./DarwinService"

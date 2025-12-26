@@ -31,6 +31,7 @@ import {
 	Server,
 	Users2,
 	Sparkles, // kilocode_change: Darwin evolution system
+	BarChart3, // kilocode_change: Darwin analytics
 } from "lucide-react"
 
 // kilocode_change
@@ -87,6 +88,7 @@ import deepEqual from "fast-deep-equal" // kilocode_change
 import { GhostServiceSettingsView } from "../kilocode/settings/GhostServiceSettings" // kilocode_change
 import { SlashCommandsSettings } from "./SlashCommandsSettings"
 import { DarwinSettings } from "./DarwinSettings" // kilocode_change: Darwin evolution system
+import { DarwinAnalyticsDashboard } from "../darwin" // kilocode_change: Darwin analytics dashboard
 import { UISettings } from "./UISettings"
 import ModesView from "../modes/ModesView"
 // import McpView from "../mcp/McpView" // kilocode_change: own view
@@ -118,6 +120,7 @@ const sectionNames = [
 	"prompts",
 	"ui",
 	"darwin", // kilocode_change: Darwin evolution system
+	"darwinAnalytics",
 	"experimental",
 	"language",
 	"mcp",
@@ -604,27 +607,26 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 			})
 			vscode.postMessage({ type: "ttsEnabled", bool: ttsEnabled })
 			vscode.postMessage({ type: "ttsSpeed", value: ttsSpeed })
-			vscode.postMessage({ type: "terminalCommandApiConfigId", text: terminalCommandApiConfigId || "" }) // kilocode_change
-			vscode.postMessage({ type: "showAutoApproveMenu", bool: showAutoApproveMenu }) // kilocode_change
-			vscode.postMessage({ type: "yoloMode", bool: yoloMode }) // kilocode_change
-			vscode.postMessage({ type: "allowVeryLargeReads", bool: allowVeryLargeReads }) // kilocode_change
+			vscode.postMessage({ type: "terminalCommandApiConfigId", text: terminalCommandApiConfigId || "" })
+			vscode.postMessage({ type: "showAutoApproveMenu", bool: showAutoApproveMenu })
+			vscode.postMessage({ type: "yoloMode", bool: yoloMode })
+			vscode.postMessage({ type: "allowVeryLargeReads", bool: allowVeryLargeReads })
 			vscode.postMessage({ type: "currentApiConfigName", text: currentApiConfigName })
-			vscode.postMessage({ type: "showTaskTimeline", bool: showTaskTimeline }) // kilocode_change
-			vscode.postMessage({ type: "sendMessageOnEnter", bool: sendMessageOnEnter }) // kilocode_change
-			vscode.postMessage({ type: "showTimestamps", bool: showTimestamps }) // kilocode_change
-			vscode.postMessage({ type: "hideCostBelowThreshold", value: hideCostBelowThreshold }) // kilocode_change
+			vscode.postMessage({ type: "showTaskTimeline", bool: showTaskTimeline })
+			vscode.postMessage({ type: "sendMessageOnEnter", bool: sendMessageOnEnter })
+			vscode.postMessage({ type: "showTimestamps", bool: showTimestamps })
+			vscode.postMessage({ type: "hideCostBelowThreshold", value: hideCostBelowThreshold })
 			vscode.postMessage({ type: "updateCondensingPrompt", text: customCondensingPrompt || "" })
-			vscode.postMessage({ type: "yoloGatekeeperApiConfigId", text: yoloGatekeeperApiConfigId || "" }) // kilocode_change: AI gatekeeper for YOLO mode
+			vscode.postMessage({ type: "yoloGatekeeperApiConfigId", text: yoloGatekeeperApiConfigId || "" })
 			vscode.postMessage({ type: "setReasoningBlockCollapsed", bool: reasoningBlockCollapsed ?? true })
-			vscode.postMessage({ type: "upsertApiConfiguration", text: editingApiConfigName, apiConfiguration }) // kilocode_change: Save to editing profile instead of current active profile
+			vscode.postMessage({ type: "upsertApiConfiguration", text: editingApiConfigName, apiConfiguration })
 			vscode.postMessage({ type: "telemetrySetting", text: telemetrySetting })
-			vscode.postMessage({ type: "systemNotificationsEnabled", bool: systemNotificationsEnabled }) // kilocode_change
-			vscode.postMessage({ type: "ghostServiceSettings", values: ghostServiceSettings }) // kilocode_change
-			vscode.postMessage({ type: "morphApiKey", text: morphApiKey }) // kilocode_change
-			vscode.postMessage({ type: "fastApplyModel", text: fastApplyModel }) // kilocode_change: Fast Apply model selection
-			vscode.postMessage({ type: "fastApplyApiProvider", text: fastApplyApiProvider }) // kilocode_change: Fast Apply model api base url
+			vscode.postMessage({ type: "systemNotificationsEnabled", bool: systemNotificationsEnabled })
+			vscode.postMessage({ type: "ghostServiceSettings", values: ghostServiceSettings })
+			vscode.postMessage({ type: "morphApiKey", text: morphApiKey })
+			vscode.postMessage({ type: "fastApplyModel", text: fastApplyModel })
+			vscode.postMessage({ type: "fastApplyApiProvider", text: fastApplyApiProvider })
 			vscode.postMessage({ type: "kiloCodeImageApiKey", text: kiloCodeImageApiKey })
-			// kilocode_change start - Auto-purge settings
 			vscode.postMessage({ type: "autoPurgeEnabled", bool: autoPurgeEnabled })
 			vscode.postMessage({ type: "autoPurgeDefaultRetentionDays", value: autoPurgeDefaultRetentionDays })
 			vscode.postMessage({
@@ -639,10 +641,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 				type: "autoPurgeIncompleteTaskRetentionDays",
 				value: autoPurgeIncompleteTaskRetentionDays,
 			})
-			// kilocode_change end - Auto-purge settings
 
-			// kilocode_change: After saving, sync cachedState to extensionState without clobbering
-			// the editing profile's apiConfiguration when editing a non-active profile.
 			if (editingApiConfigName !== currentApiConfigName) {
 				// Only sync non-apiConfiguration fields from extensionState
 				const { apiConfiguration: _, ...restOfExtensionState } = extensionState
@@ -654,7 +653,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 				// When editing the active profile, sync everything including apiConfiguration
 				setCachedState((prevState) => ({ ...prevState, ...extensionState }))
 			}
-			// kilocode_change end
+
 			setChangeDetected(false)
 		}
 	}
@@ -766,19 +765,21 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 			{ id: "prompts", icon: MessageSquare },
 			// { id: "ui", icon: Glasses }, // kilocode_change: we have our own display section
 			{ id: "darwin" as const, icon: Sparkles }, // kilocode_change: Darwin evolution system
+			{ id: "darwinAnalytics" as const, icon: BarChart3 }, // kilocode_change: Darwin analytics dashboard
 			{ id: "experimental", icon: FlaskConical },
 			{ id: "language", icon: Globe },
 			{ id: "mcp", icon: Server },
 			{ id: "about", icon: Info },
 		],
-		[], // kilocode_change
+		[],
 	)
+
 	// Update target section logic to set active tab
 	useEffect(() => {
 		if (targetSection && sectionNames.includes(targetSection as SectionName)) {
 			setActiveTab(targetSection as SectionName)
 		}
-	}, [targetSection]) // kilocode_change
+	}, [targetSection])
 
 	// kilocode_change start - Listen for messages to restore editing profile after auth
 	useEffect(() => {
@@ -1098,7 +1099,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							reasoningBlockCollapsed={reasoningBlockCollapsed ?? true}
 							showTaskTimeline={showTaskTimeline}
 							sendMessageOnEnter={sendMessageOnEnter}
-							showTimestamps={cachedState.showTimestamps} // kilocode_change
+							showTimestamps={cachedState.showTimestamps}
 							hideCostBelowThreshold={hideCostBelowThreshold}
 							setCachedStateField={setCachedStateField}
 						/>
@@ -1137,7 +1138,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							maxImageFileSize={maxImageFileSize}
 							maxTotalImageSize={maxTotalImageSize}
 							maxConcurrentFileReads={cachedState.maxConcurrentFileReads ?? 5}
-							allowVeryLargeReads={allowVeryLargeReads /* kilocode_change */}
+							allowVeryLargeReads={allowVeryLargeReads}
 							profileThresholds={profileThresholds}
 							includeDiagnosticMessages={includeDiagnosticMessages}
 							maxDiagnosticMessages={maxDiagnosticMessages}
@@ -1163,7 +1164,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							terminalZshP10k={terminalZshP10k}
 							terminalZdotdir={terminalZdotdir}
 							terminalCompressProgressBar={terminalCompressProgressBar}
-							terminalCommandApiConfigId={terminalCommandApiConfigId} // kilocode_change
+							terminalCommandApiConfigId={terminalCommandApiConfigId}
 							setCachedStateField={setCachedStateField}
 						/>
 					)}
@@ -1200,6 +1201,10 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 						<DarwinSettings darwin={darwin} setCachedStateField={setCachedStateField} />
 					)}
 					{/* kilocode_change end: Darwin Evolution System */}
+
+					{/* kilocode_change start: Darwin Analytics Dashboard */}
+					{activeTab === "darwinAnalytics" && <DarwinAnalyticsDashboard />}
+					{/* kilocode_change end: Darwin Analytics Dashboard */}
 
 					{/* Experimental Section */}
 					{activeTab === "experimental" && (

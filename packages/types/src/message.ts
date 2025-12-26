@@ -195,6 +195,7 @@ export const clineSays = [
 	"sliding_window_truncation",
 	"codebase_search_result",
 	"user_edit_todos",
+	"evolution_event", // kilocode_change: Darwin evolution events
 ] as const
 
 export const clineSaySchema = z.enum(clineSays)

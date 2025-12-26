@@ -61,7 +61,7 @@ export type DarwinConfig = z.infer<typeof darwinConfigSchema>
 /**
  * Default Darwin configuration
  */
-export const DEFAULT_DARWIN_CONFIG: DarwinConfig = {
+export const DEFAULT_DARWIN_CONFIG: DarwinConfigWithLLMSynthesis = {
 	enabled: false,
 	autonomyLevel: 0,
 	traceCapture: true,
@@ -69,6 +69,23 @@ export const DEFAULT_DARWIN_CONFIG: DarwinConfig = {
 	skillSynthesis: false,
 	configEvolution: false,
 	councilEnabled: true,
+	// Phase 4B defaults
+	enableRealMultiAgent: false,
+	multiAgentTimeout: 300000,
+	maxConcurrentAgents: 4,
+	// Phase 4C defaults
+	llmSynthesis: {
+		enabled: false,
+		strategy: "hybrid",
+		temperature: 0.3,
+		maxTokens: 4000,
+		maxRetries: 3,
+		maxRefinementAttempts: 3,
+		trackCosts: true,
+		maxCostPerSynthesis: 0.1,
+		enablePromptCaching: true,
+		timeoutMs: 30000,
+	},
 }
 
 // =============================================================================
@@ -889,3 +906,926 @@ export const analysisReportSchema = z.object({
 })
 
 export type AnalysisReport = z.infer<typeof analysisReportSchema>
+
+// =============================================================================
+// Phase 4A: Autonomous Execution Engine Types
+// =============================================================================
+
+/**
+ * Execution decision status for autonomous processing
+ */
+export const executionDecisionStatusSchema = z.enum([
+	"approved", // Proposal can be auto-executed
+	"deferred", // Proposal needs further review
+	"rejected", // Proposal should not be executed
+	"escalated", // Proposal requires human review
+])
+
+export type ExecutionDecisionStatus = z.infer<typeof executionDecisionStatusSchema>
+
+/**
+ * Schema for an execution decision
+ */
+export const executionDecisionSchema = z.object({
+	/** Proposal ID this decision is for */
+	proposalId: z.string(),
+
+	/** Decision status */
+	status: executionDecisionStatusSchema,
+
+	/** Risk level assessed for the proposal */
+	riskLevel: proposalRiskSchema,
+
+	/** Confidence score for the risk assessment (0-1) */
+	confidence: z.number().min(0).max(1),
+
+	/** Reason for the decision */
+	reason: z.string(),
+
+	/** Whether the decision was made automatically */
+	isAutomatic: z.boolean(),
+
+	/** Timestamp when decision was made */
+	decidedAt: z.number(),
+
+	/** Additional context for the decision */
+	context: z.record(z.string(), z.unknown()).optional(),
+})
+
+export type ExecutionDecision = z.infer<typeof executionDecisionSchema>
+
+/**
+ * Risk assessment factors
+ */
+export const riskFactorSchema = z.object({
+	/** Factor name */
+	name: z.string(),
+
+	/** Weight of this factor (0-1) */
+	weight: z.number().min(0).max(1),
+
+	/** Assessed value for this factor (0-1, 0=low risk, 1=high risk) */
+	value: z.number().min(0).max(1),
+
+	/** Explanation for the assessment */
+	explanation: z.string(),
+})
+
+export type RiskFactor = z.infer<typeof riskFactorSchema>
+
+/**
+ * Schema for risk assessment result
+ */
+export const riskAssessmentResultSchema = z.object({
+	/** Proposal ID that was assessed */
+	proposalId: z.string(),
+
+	/** Calculated risk level */
+	riskLevel: proposalRiskSchema,
+
+	/** Overall risk score (0-1) */
+	riskScore: z.number().min(0).max(1),
+
+	/** Confidence in the assessment (0-1) */
+	confidence: z.number().min(0).max(1),
+
+	/** Individual risk factors */
+	factors: z.array(riskFactorSchema),
+
+	/** Timestamp when assessment was made */
+	assessedAt: z.number(),
+
+	/** Recommendations based on assessment */
+	recommendations: z.array(z.string()).optional(),
+})
+
+export type RiskAssessmentResult = z.infer<typeof riskAssessmentResultSchema>
+
+/**
+ * Auto-approval rule for routing proposals
+ */
+export const autoApprovalRuleSchema = z.object({
+	/** Rule ID */
+	id: z.string(),
+
+	/** Rule name */
+	name: z.string(),
+
+	/** Rule description */
+	description: z.string(),
+
+	/** Priority of this rule (lower = higher priority) */
+	priority: z.number().default(0),
+
+	/** Whether the rule is active */
+	active: z.boolean().default(true),
+
+	/** Conditions for the rule to apply */
+	conditions: z.object({
+		/** Proposal types this rule applies to */
+		proposalTypes: z.array(proposalTypeSchema).optional(),
+
+		/** Maximum risk level for auto-approval */
+		maxRiskLevel: proposalRiskSchema.optional(),
+
+		/** Minimum confidence required */
+		minConfidence: z.number().min(0).max(1).optional(),
+
+		/** Maximum number of affected files */
+		maxAffectedFiles: z.number().optional(),
+
+		/** Required scope (global vs project) */
+		scope: skillScopeSchema.optional(),
+	}),
+
+	/** Action to take when conditions match */
+	action: z.enum(["approve", "defer", "reject", "escalate"]),
+
+	/** Timestamp when rule was created */
+	createdAt: z.number(),
+
+	/** Timestamp when rule was last updated */
+	updatedAt: z.number(),
+})
+
+export type AutoApprovalRule = z.infer<typeof autoApprovalRuleSchema>
+
+/**
+ * Execution health metrics for monitoring
+ */
+export const executionHealthMetricsSchema = z.object({
+	/** Total executions today */
+	executionsToday: z.number().default(0),
+
+	/** Successful executions today */
+	successesToday: z.number().default(0),
+
+	/** Failed executions today */
+	failuresToday: z.number().default(0),
+
+	/** Rollbacks today */
+	rollbacksToday: z.number().default(0),
+
+	/** Average execution time in milliseconds */
+	avgExecutionTimeMs: z.number().default(0),
+
+	/** Current queue size */
+	queueSize: z.number().default(0),
+
+	/** Last execution timestamp */
+	lastExecutionAt: z.number().optional(),
+
+	/** Last successful execution timestamp */
+	lastSuccessAt: z.number().optional(),
+
+	/** Last failure timestamp */
+	lastFailureAt: z.number().optional(),
+
+	/** Success rate (0-1) */
+	successRate: z.number().min(0).max(1).default(1),
+
+	/** Health status */
+	status: z.enum(["healthy", "degraded", "unhealthy"]).default("healthy"),
+
+	/** Last health check timestamp */
+	lastHealthCheckAt: z.number(),
+
+	/** Daily execution limit */
+	dailyLimit: z.number().default(50),
+
+	/** Remaining executions today */
+	remainingToday: z.number().default(50),
+})
+
+export type ExecutionHealthMetrics = z.infer<typeof executionHealthMetricsSchema>
+
+/**
+ * Configuration for the autonomous executor
+ */
+export const autonomousExecutorConfigSchema = z.object({
+	/** Whether autonomous execution is enabled */
+	enabled: z.boolean().default(false),
+
+	/** Autonomy level (0=manual, 1=assisted, 2=auto) */
+	autonomyLevel: autonomyLevelSchema.default(0),
+
+	/** Maximum proposals to process per cycle */
+	maxPerCycle: z.number().min(1).max(10).default(5),
+
+	/** Daily execution limit */
+	dailyLimit: z.number().min(0).max(100).default(50),
+
+	/** Minimum confidence required for auto-approval */
+	minConfidence: z.number().min(0).max(1).default(0.8),
+
+	/** Enable dry run mode (no actual changes) */
+	dryRun: z.boolean().default(false),
+
+	/** Enable rollback on failure */
+	rollbackOnFailure: z.boolean().default(true),
+
+	/** Require council approval for medium+ risk */
+	requireCouncilForMediumRisk: z.boolean().default(true),
+
+	/** Custom auto-approval rules */
+	customRules: z.array(autoApprovalRuleSchema).default([]),
+})
+
+export type AutonomousExecutorConfig = z.infer<typeof autonomousExecutorConfigSchema>
+
+/**
+ * Default autonomous executor configuration
+ */
+export const DEFAULT_AUTONOMOUS_EXECUTOR_CONFIG: AutonomousExecutorConfig = {
+	enabled: false,
+	autonomyLevel: 0,
+	maxPerCycle: 5,
+	dailyLimit: 50,
+	minConfidence: 0.8,
+	dryRun: false,
+	rollbackOnFailure: true,
+	requireCouncilForMediumRisk: true,
+	customRules: [],
+}
+
+/**
+ * Configuration for the execution scheduler
+ */
+export const executionSchedulerConfigSchema = z.object({
+	/** Whether the scheduler is enabled */
+	enabled: z.boolean().default(true),
+
+	/** Interval between scheduler runs in milliseconds */
+	intervalMs: z.number().min(10000).max(300000).default(60000), // 60 seconds default
+
+	/** Maximum batch size per run */
+	batchSize: z.number().min(1).max(20).default(10),
+
+	/** Priority order for processing */
+	priorityOrder: z.enum(["age", "impact", "risk"]).default("age"),
+
+	/** Maximum age in milliseconds before forcing escalation */
+	maxAgeMs: z.number().min(60000).default(86400000), // 24 hours default
+
+	/** Quiet hours (no auto-execution) */
+	quietHours: z
+		.object({
+			enabled: z.boolean().default(false),
+			startHour: z.number().min(0).max(23).default(22),
+			endHour: z.number().min(0).max(23).default(6),
+		})
+		.optional(),
+
+	/** Enable health monitoring */
+	healthMonitoring: z.boolean().default(true),
+})
+
+export type ExecutionSchedulerConfig = z.infer<typeof executionSchedulerConfigSchema>
+
+/**
+ * Default execution scheduler configuration
+ */
+export const DEFAULT_EXECUTION_SCHEDULER_CONFIG: ExecutionSchedulerConfig = {
+	enabled: true,
+	intervalMs: 60000,
+	batchSize: 10,
+	priorityOrder: "age",
+	maxAgeMs: 86400000,
+	quietHours: { enabled: false, startHour: 22, endHour: 6 },
+	healthMonitoring: true,
+}
+
+/**
+ * Schema for an execution batch
+ */
+export const executionBatchSchema = z.object({
+	/** Batch ID */
+	id: z.string(),
+
+	/** Proposal IDs in this batch */
+	proposalIds: z.array(z.string()),
+
+	/** Batch status */
+	status: z.enum(["pending", "processing", "completed", "failed"]),
+
+	/** Timestamp when batch was created */
+	createdAt: z.number(),
+
+	/** Timestamp when batch started processing */
+	startedAt: z.number().optional(),
+
+	/** Timestamp when batch completed */
+	completedAt: z.number().optional(),
+
+	/** Results for each proposal */
+	results: z
+		.array(
+			z.object({
+				proposalId: z.string(),
+				success: z.boolean(),
+				error: z.string().optional(),
+				executionTimeMs: z.number().optional(),
+			}),
+		)
+		.default([]),
+
+	/** Total execution time in milliseconds */
+	totalTimeMs: z.number().optional(),
+})
+
+export type ExecutionBatch = z.infer<typeof executionBatchSchema>
+
+/**
+ * Extended evolution state with Phase 4A fields
+ */
+export const evolutionStateWithAutonomySchema = evolutionStateSchema.extend({
+	/** Autonomous executor configuration */
+	autonomousExecutorConfig: autonomousExecutorConfigSchema.optional(),
+
+	/** Execution scheduler configuration */
+	schedulerConfig: executionSchedulerConfigSchema.optional(),
+
+	/** Current execution health metrics */
+	healthMetrics: executionHealthMetricsSchema.optional(),
+
+	/** Pending execution batches */
+	pendingBatches: z.array(z.string()).default([]),
+
+	/** Completed execution batches (limited history) */
+	completedBatches: z.array(z.string()).default([]),
+
+	/** Extended stats for Phase 4A */
+	autonomyStats: z
+		.object({
+			totalAutoApproved: z.number().default(0),
+			totalAutoRejected: z.number().default(0),
+			totalEscalated: z.number().default(0),
+			totalRolledBack: z.number().default(0),
+			lastSchedulerRunAt: z.number().optional(),
+		})
+		.optional(),
+})
+
+export type EvolutionStateWithAutonomy = z.infer<typeof evolutionStateWithAutonomySchema>
+
+/**
+ * Execution event types for Phase 4A
+ */
+export const executionEventTypeSchema = z.enum([
+	"execution_started",
+	"execution_completed",
+	"execution_failed",
+	"approval_required",
+	"proposal_escalated",
+	"rollback_started",
+	"rollback_completed",
+	"scheduler_tick",
+	"health_check",
+])
+
+export type ExecutionEventType = z.infer<typeof executionEventTypeSchema>
+
+/**
+ * Schema for execution events
+ */
+export const executionEventSchema = z.object({
+	/** Event type */
+	type: executionEventTypeSchema,
+
+	/** Event timestamp */
+	timestamp: z.number(),
+
+	/** Proposal ID (if applicable) */
+	proposalId: z.string().optional(),
+
+	/** Batch ID (if applicable) */
+	batchId: z.string().optional(),
+
+	/** Event data */
+	data: z.record(z.string(), z.unknown()).optional(),
+})
+
+export type ExecutionEvent = z.infer<typeof executionEventSchema>
+
+// =============================================================================
+// Phase 4B: Multi-Agent Council Types
+// =============================================================================
+
+/**
+ * Agent roles for multi-agent council
+ * Each role represents a specialized reviewer with specific expertise
+ */
+export const agentRoleSchema = z.enum([
+	"analyst", // Technical feasibility and impact analysis
+	"reviewer", // Code quality and maintainability review
+	"security", // Security implications review
+	"performance", // Performance impact assessment
+])
+
+export type AgentRole = z.infer<typeof agentRoleSchema>
+
+/**
+ * Agent review result from a delegated task
+ */
+export const agentReviewResultSchema = z.object({
+	/** Agent role that performed the review */
+	role: agentRoleSchema,
+
+	/** Vote decision */
+	vote: councilVoteValueSchema,
+
+	/** Confidence score (0-1) */
+	confidence: z.number().min(0).max(1),
+
+	/** Detailed reasoning for the vote */
+	reasoning: z.string(),
+
+	/** Suggested improvements (if vote is request_changes) */
+	suggestions: z.array(z.string()).optional(),
+
+	/** Issues identified during review */
+	issues: z
+		.array(
+			z.object({
+				severity: z.enum(["low", "medium", "high", "critical"]),
+				description: z.string(),
+			}),
+		)
+		.optional(),
+
+	/** Duration of review in milliseconds */
+	durationMs: z.number(),
+
+	/** Timestamp when review completed */
+	completedAt: z.number(),
+
+	/** Error message if review failed */
+	error: z.string().optional(),
+
+	/** Task ID of the delegated review task */
+	taskId: z.string().optional(),
+})
+
+export type AgentReviewResult = z.infer<typeof agentReviewResultSchema>
+
+/**
+ * Configuration for the multi-agent council
+ */
+export const multiAgentCouncilConfigSchema = z.object({
+	/** Whether to enable real multi-agent execution */
+	enabled: z.boolean().default(false),
+
+	/** Timeout for each agent review in milliseconds */
+	agentTimeout: z.number().min(5000).max(600000).default(300000), // 5 min default
+
+	/** Maximum concurrent agents (for future parallel execution) */
+	maxConcurrentAgents: z.number().min(1).max(8).default(4),
+
+	/** Agent roles to include in council reviews */
+	activeRoles: z.array(agentRoleSchema).default(["analyst", "reviewer", "security", "performance"]),
+
+	/** Mode to use for agent reviews (e.g., 'ask') */
+	reviewMode: z.string().default("ask"),
+
+	/** Minimum confidence threshold for valid votes */
+	minConfidenceThreshold: z.number().min(0).max(1).default(0.5),
+
+	/** Voting policy: unanimity, majority, or weighted */
+	votingPolicy: z.enum(["unanimity", "majority", "weighted"]).default("majority"),
+
+	/** Whether to continue on agent failure */
+	continueOnAgentFailure: z.boolean().default(true),
+
+	/** Fallback to simulated council on delegation failure */
+	fallbackToSimulated: z.boolean().default(true),
+})
+
+export type MultiAgentCouncilConfig = z.infer<typeof multiAgentCouncilConfigSchema>
+
+/**
+ * Default multi-agent council configuration
+ */
+export const DEFAULT_MULTI_AGENT_COUNCIL_CONFIG: MultiAgentCouncilConfig = {
+	enabled: false,
+	agentTimeout: 300000, // 5 minutes
+	maxConcurrentAgents: 4,
+	activeRoles: ["analyst", "reviewer", "security", "performance"],
+	reviewMode: "ask",
+	minConfidenceThreshold: 0.5,
+	votingPolicy: "majority",
+	continueOnAgentFailure: true,
+	fallbackToSimulated: true,
+}
+
+/**
+ * Status of council execution
+ */
+export const councilExecutionStatusSchema = z.enum([
+	"pending", // Awaiting execution
+	"in_progress", // Currently executing agent reviews
+	"completed", // All reviews completed
+	"failed", // Execution failed
+	"timeout", // Execution timed out
+	"cancelled", // Execution cancelled
+])
+
+export type CouncilExecutionStatus = z.infer<typeof councilExecutionStatusSchema>
+
+/**
+ * Schema for tracking council execution
+ */
+export const councilExecutionSchema = z.object({
+	/** Unique execution ID */
+	id: z.string(),
+
+	/** Proposal being reviewed */
+	proposalId: z.string(),
+
+	/** Execution status */
+	status: councilExecutionStatusSchema,
+
+	/** Agent roles being executed */
+	roles: z.array(agentRoleSchema),
+
+	/** Individual agent results */
+	results: z.array(agentReviewResultSchema),
+
+	/** Which agents are currently executing */
+	inProgress: z.array(agentRoleSchema).default([]),
+
+	/** Which agents have completed */
+	completed: z.array(agentRoleSchema).default([]),
+
+	/** Which agents failed */
+	failed: z.array(agentRoleSchema).default([]),
+
+	/** Timestamp when execution started */
+	startedAt: z.number(),
+
+	/** Timestamp when execution completed */
+	completedAt: z.number().optional(),
+
+	/** Total duration in milliseconds */
+	durationMs: z.number().optional(),
+
+	/** Final aggregated decision */
+	decision: z
+		.object({
+			approved: z.boolean(),
+			reason: z.string(),
+			totalConfidence: z.number().min(0).max(1),
+			voteBreakdown: z.object({
+				approve: z.number(),
+				reject: z.number(),
+				abstain: z.number(),
+				requestChanges: z.number(),
+			}),
+		})
+		.optional(),
+
+	/** Error message if execution failed */
+	error: z.string().optional(),
+
+	/** Whether execution used fallback to simulated council */
+	usedFallback: z.boolean().default(false),
+})
+
+export type CouncilExecution = z.infer<typeof councilExecutionSchema>
+
+/**
+ * Agent prompt configuration for specialized reviews
+ */
+export const agentPromptConfigSchema = z.object({
+	/** Agent role */
+	role: agentRoleSchema,
+
+	/** System prompt for the agent */
+	systemPrompt: z.string(),
+
+	/** User prompt template with placeholders */
+	userPromptTemplate: z.string(),
+
+	/** Mode to run the agent in */
+	mode: z.string().default("ask"),
+})
+
+export type AgentPromptConfig = z.infer<typeof agentPromptConfigSchema>
+
+/**
+ * Extended Darwin configuration with Phase 4B fields
+ */
+export const darwinConfigWithMultiAgentSchema = darwinConfigSchema.extend({
+	/** Enable real multi-agent council (Phase 4B) */
+	enableRealMultiAgent: z.boolean().default(false),
+
+	/** Multi-agent timeout in milliseconds */
+	multiAgentTimeout: z.number().min(5000).max(600000).default(300000),
+
+	/** Maximum concurrent agents */
+	maxConcurrentAgents: z.number().min(1).max(8).default(4),
+})
+
+export type DarwinConfigWithMultiAgent = z.infer<typeof darwinConfigWithMultiAgentSchema>
+
+// =============================================================================
+// Phase 4C: LLM-Powered Skill Synthesis Types
+// =============================================================================
+
+/**
+ * Synthesis strategy for skill generation
+ * - template: Use only template-based synthesis (Phase 3)
+ * - llm: Use only LLM-powered synthesis
+ * - hybrid: Try LLM first, fallback to templates
+ */
+export const synthesisStrategySchema = z.enum(["template", "llm", "hybrid"])
+
+export type SynthesisStrategy = z.infer<typeof synthesisStrategySchema>
+
+/**
+ * Configuration for LLM-powered skill synthesis
+ */
+export const llmSynthesisConfigSchema = z.object({
+	/** Whether LLM synthesis is enabled */
+	enabled: z.boolean().default(false),
+
+	/** Synthesis strategy: template, llm, or hybrid */
+	strategy: synthesisStrategySchema.default("hybrid"),
+
+	/** Model to use for synthesis (defaults to configured API provider) */
+	model: z.string().optional(),
+
+	/** Temperature for LLM generation (0-1, lower = more deterministic) */
+	temperature: z.number().min(0).max(1).default(0.3),
+
+	/** Maximum tokens for LLM response */
+	maxTokens: z.number().min(100).max(16000).default(4000),
+
+	/** Maximum retries for LLM API calls */
+	maxRetries: z.number().min(0).max(5).default(3),
+
+	/** Maximum refinement attempts if validation fails */
+	maxRefinementAttempts: z.number().min(0).max(5).default(3),
+
+	/** API config ID to use for synthesis (uses default if not set) */
+	apiConfigId: z.string().optional(),
+
+	/** Enable cost tracking for synthesis operations */
+	trackCosts: z.boolean().default(true),
+
+	/** Maximum cost per synthesis in USD (safety limit) */
+	maxCostPerSynthesis: z.number().min(0).default(0.1),
+
+	/** Cache successful prompts for similar problems */
+	enablePromptCaching: z.boolean().default(true),
+
+	/** Timeout for each LLM call in milliseconds */
+	timeoutMs: z.number().min(5000).max(120000).default(30000),
+})
+
+export type LLMSynthesisConfig = z.infer<typeof llmSynthesisConfigSchema>
+
+/**
+ * Default LLM synthesis configuration
+ */
+export const DEFAULT_LLM_SYNTHESIS_CONFIG: LLMSynthesisConfig = {
+	enabled: false,
+	strategy: "hybrid",
+	temperature: 0.3,
+	maxTokens: 4000,
+	maxRetries: 3,
+	maxRefinementAttempts: 3,
+	apiConfigId: undefined,
+	trackCosts: true,
+	maxCostPerSynthesis: 0.1,
+	enablePromptCaching: true,
+	timeoutMs: 30000,
+}
+
+/**
+ * Context for LLM synthesis from doom loop or capability gap
+ */
+export const synthesisContextSchema = z.object({
+	/** The tool that failed or is missing */
+	toolName: z.string().optional(),
+
+	/** Error messages from the doom loop */
+	errorMessages: z.array(z.string()).default([]),
+
+	/** Stack traces from failures */
+	stackTraces: z.array(z.string()).default([]),
+
+	/** Previously attempted fixes that didn't work */
+	attemptedFixes: z.array(z.string()).default([]),
+
+	/** Relevant code snippets from the workspace */
+	fileContext: z
+		.array(
+			z.object({
+				path: z.string(),
+				content: z.string(),
+				lineRange: z.tuple([z.number(), z.number()]).optional(),
+			}),
+		)
+		.default([]),
+
+	/** Error patterns detected */
+	errorPatterns: z.array(z.string()).default([]),
+
+	/** Number of times the problem has occurred */
+	occurrenceCount: z.number().default(1),
+
+	/** Trace event IDs related to this context */
+	traceEventIds: z.array(z.string()).default([]),
+
+	/** User's original intent/task description */
+	userIntent: z.string().optional(),
+
+	/** Workspace/project type (e.g., 'react', 'node', 'python') */
+	projectType: z.string().optional(),
+
+	/** Additional context metadata */
+	metadata: z.record(z.string(), z.unknown()).optional(),
+})
+
+export type SynthesisContext = z.infer<typeof synthesisContextSchema>
+
+/**
+ * Test case generated by LLM for the synthesized skill
+ */
+export const synthesisTestCaseSchema = z.object({
+	/** Test case name/description */
+	name: z.string(),
+
+	/** Input for the test */
+	input: z.record(z.string(), z.unknown()),
+
+	/** Expected output or behavior */
+	expectedOutput: z.record(z.string(), z.unknown()).optional(),
+
+	/** Expected error (if testing error handling) */
+	expectsError: z.boolean().default(false),
+
+	/** Assertion description */
+	assertion: z.string(),
+})
+
+export type SynthesisTestCase = z.infer<typeof synthesisTestCaseSchema>
+
+/**
+ * Result from LLM skill synthesis
+ */
+export const llmSynthesisResultSchema = z.object({
+	/** Whether synthesis succeeded */
+	success: z.boolean(),
+
+	/** Generated TypeScript code */
+	code: z.string().optional(),
+
+	/** LLM's explanation of the solution approach */
+	explanation: z.string().optional(),
+
+	/** Generated test cases */
+	testCases: z.array(synthesisTestCaseSchema).default([]),
+
+	/** Suggested skill name */
+	suggestedName: z.string().optional(),
+
+	/** Suggested skill description */
+	suggestedDescription: z.string().optional(),
+
+	/** Required permissions for the skill */
+	requiredPermissions: z.array(z.string()).default([]),
+
+	/** Error message if synthesis failed */
+	error: z.string().optional(),
+
+	/** Number of refinement attempts made */
+	refinementAttempts: z.number().default(0),
+
+	/** Total tokens used */
+	tokensUsed: z.number().optional(),
+
+	/** Estimated cost in USD */
+	costUsd: z.number().optional(),
+
+	/** Duration of synthesis in milliseconds */
+	durationMs: z.number().optional(),
+
+	/** Model used for synthesis */
+	modelUsed: z.string().optional(),
+
+	/** Fallback strategy used (if any) */
+	fallbackUsed: z.enum(["template", "none"]).optional(),
+
+	/** Validation issues from refinement attempts */
+	validationHistory: z
+		.array(
+			z.object({
+				attempt: z.number(),
+				issues: z.array(z.string()),
+			}),
+		)
+		.default([]),
+})
+
+export type LLMSynthesisResult = z.infer<typeof llmSynthesisResultSchema>
+
+/**
+ * Prompt template configuration for LLM synthesis
+ */
+export const synthesisPromptConfigSchema = z.object({
+	/** System prompt for the LLM */
+	systemPrompt: z.string().optional(),
+
+	/** Additional constraints to include in prompt */
+	constraints: z.array(z.string()).default([]),
+
+	/** Example code patterns to include */
+	examplePatterns: z.array(z.string()).default([]),
+
+	/** Whether to include security warnings */
+	includeSecurityWarnings: z.boolean().default(true),
+
+	/** Whether to request test cases */
+	requestTestCases: z.boolean().default(true),
+
+	/** Maximum context lines to include per file */
+	maxContextLines: z.number().default(100),
+})
+
+export type SynthesisPromptConfig = z.infer<typeof synthesisPromptConfigSchema>
+
+/**
+ * Synthesis metrics for tracking and cost management
+ */
+export const synthesisMetricsSchema = z.object({
+	/** Total synthesis attempts */
+	totalAttempts: z.number().default(0),
+
+	/** Successful syntheses */
+	successfulSyntheses: z.number().default(0),
+
+	/** Failed syntheses */
+	failedSyntheses: z.number().default(0),
+
+	/** Syntheses that fell back to templates */
+	templateFallbacks: z.number().default(0),
+
+	/** Total tokens consumed */
+	totalTokens: z.number().default(0),
+
+	/** Total cost in USD */
+	totalCostUsd: z.number().default(0),
+
+	/** Average synthesis time in milliseconds */
+	avgSynthesisTimeMs: z.number().default(0),
+
+	/** Average refinement attempts per synthesis */
+	avgRefinementAttempts: z.number().default(0),
+
+	/** Last synthesis timestamp */
+	lastSynthesisAt: z.number().optional(),
+
+	/** Syntheses today (for rate limiting) */
+	synthesesToday: z.number().default(0),
+
+	/** Last date reset (for daily limits) */
+	lastResetDate: z.string().optional(),
+})
+
+export type SynthesisMetrics = z.infer<typeof synthesisMetricsSchema>
+
+/**
+ * Extended Darwin configuration with Phase 4C LLM synthesis fields
+ */
+export const darwinConfigWithLLMSynthesisSchema = darwinConfigWithMultiAgentSchema.extend({
+	/** LLM synthesis configuration */
+	llmSynthesis: llmSynthesisConfigSchema.optional(),
+})
+
+export type DarwinConfigWithLLMSynthesis = z.infer<typeof darwinConfigWithLLMSynthesisSchema>
+
+/**
+ * Extended evolution state with Phase 4C fields
+ */
+export const evolutionStateWithLLMSynthesisSchema = evolutionStateWithAutonomySchema.extend({
+	/** LLM synthesis configuration */
+	llmSynthesisConfig: llmSynthesisConfigSchema.optional(),
+
+	/** Synthesis metrics */
+	synthesisMetrics: synthesisMetricsSchema.optional(),
+
+	/** Cached prompt patterns for reuse */
+	promptCache: z
+		.array(
+			z.object({
+				problemHash: z.string(),
+				prompt: z.string(),
+				success: z.boolean(),
+				createdAt: z.number(),
+			}),
+		)
+		.default([]),
+})
+
+export type EvolutionStateWithLLMSynthesis = z.infer<typeof evolutionStateWithLLMSynthesisSchema>

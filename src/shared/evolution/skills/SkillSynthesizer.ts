@@ -1,5 +1,5 @@
 /**
- * SkillSynthesizer - Template-based skill generation for Darwin
+ * SkillSynthesizer - Template-based and hybrid skill generation for Darwin
  *
  * Responsibilities:
  * - Generate skills from templates
@@ -7,9 +7,9 @@
  * - Create TypeScript code with error handling
  * - Generate test cases
  * - Package skills for validation
+ * - Support hybrid synthesis with LLM (Phase 4C)
  *
- * MVP: Template-based synthesis
- * Future: LLM-powered synthesis via Kilocode API
+ * MVR: Template-based synthesis with optional LLM enhancement
  */
 
 import type {
@@ -21,7 +21,15 @@ import type {
 	SkillType,
 	SkillTemplateType,
 	LearningSignal,
+	SynthesisStrategy,
+	SynthesisContext,
+	LLMSynthesisConfig,
 } from "@roo-code/types"
+
+import { DEFAULT_LLM_SYNTHESIS_CONFIG } from "@roo-code/types"
+
+/** Import LLMSkillSynthesizer for hybrid mode */
+import { LLMSkillSynthesizer, type LLMApiProvider } from "./LLMSkillSynthesizer"
 
 /** Configuration for SkillSynthesizer */
 export interface SkillSynthesizerConfig {
@@ -36,6 +44,15 @@ export interface SkillSynthesizerConfig {
 
 	/** Author name for generated skills */
 	author?: string
+
+	/** Synthesis strategy: template, llm, or hybrid (Phase 4C) */
+	synthesisStrategy?: SynthesisStrategy
+
+	/** LLM synthesis configuration */
+	llmConfig?: Partial<LLMSynthesisConfig>
+
+	/** API provider for LLM calls (required for llm or hybrid strategy) */
+	apiProvider?: LLMApiProvider
 }
 
 /** Built-in templates for skill generation */
@@ -422,14 +439,28 @@ export interface SynthesisResult {
 	code?: string
 	testCode?: string
 	error?: string
+	/** Whether LLM was used for synthesis (Phase 4C) */
+	usedLLM?: boolean
+	/** Explanation from LLM (if used) */
+	explanation?: string
+	/** Refinement attempts (if LLM used) */
+	refinementAttempts?: number
 }
 
 /**
  * SkillSynthesizer generates skills from templates or learning signals
+ * Supports hybrid mode with LLM synthesis (Phase 4C)
  */
 export class SkillSynthesizer {
-	private config: Required<SkillSynthesizerConfig>
+	private config: Required<
+		Pick<SkillSynthesizerConfig, "defaultScope" | "defaultRuntime" | "customTemplates" | "author">
+	> & {
+		synthesisStrategy: SynthesisStrategy
+		llmConfig: LLMSynthesisConfig
+		apiProvider?: LLMApiProvider
+	}
 	private templates: Map<string, SkillTemplate>
+	private llmSynthesizer?: LLMSkillSynthesizer
 
 	constructor(config: SkillSynthesizerConfig = {}) {
 		this.config = {
@@ -437,6 +468,9 @@ export class SkillSynthesizer {
 			defaultRuntime: config.defaultRuntime ?? "typescript",
 			customTemplates: config.customTemplates ?? [],
 			author: config.author ?? "Darwin Evolution System",
+			synthesisStrategy: config.synthesisStrategy ?? "template",
+			llmConfig: { ...DEFAULT_LLM_SYNTHESIS_CONFIG, ...config.llmConfig },
+			apiProvider: config.apiProvider,
 		}
 
 		// Initialize templates
@@ -447,6 +481,59 @@ export class SkillSynthesizer {
 		for (const template of this.config.customTemplates) {
 			this.templates.set(template.id, template)
 		}
+
+		// Initialize LLM synthesizer if needed (hybrid or llm strategy)
+		if (this.config.synthesisStrategy !== "template") {
+			this.initializeLLMSynthesizer()
+		}
+	}
+
+	/**
+	 * Initialize the LLM synthesizer
+	 */
+	private initializeLLMSynthesizer(): void {
+		this.llmSynthesizer = new LLMSkillSynthesizer({
+			llmConfig: this.config.llmConfig,
+			apiProvider: this.config.apiProvider,
+			templateSynthesizer: this, // Pass self for fallback
+			defaultScope: this.config.defaultScope,
+			defaultRuntime: this.config.defaultRuntime,
+			author: this.config.author,
+		})
+	}
+
+	/**
+	 * Set the API provider for LLM synthesis
+	 */
+	setApiProvider(provider: LLMApiProvider): void {
+		this.config.apiProvider = provider
+
+		// Initialize LLM synthesizer if not yet created and strategy needs it
+		if (!this.llmSynthesizer && this.config.synthesisStrategy !== "template") {
+			this.initializeLLMSynthesizer()
+		}
+
+		// Set provider on LLM synthesizer if it exists
+		if (this.llmSynthesizer) {
+			this.llmSynthesizer.setApiProvider(provider)
+		}
+	}
+
+	/**
+	 * Update synthesis strategy
+	 */
+	setSynthesisStrategy(strategy: SynthesisStrategy): void {
+		this.config.synthesisStrategy = strategy
+		if (strategy !== "template" && !this.llmSynthesizer) {
+			this.initializeLLMSynthesizer()
+		}
+	}
+
+	/**
+	 * Check if LLM synthesis is available
+	 */
+	isLLMAvailable(): boolean {
+		return this.llmSynthesizer?.isAvailable() ?? false
 	}
 
 	/**
@@ -484,6 +571,7 @@ export class SkillSynthesizer {
 				skill,
 				code,
 				testCode,
+				usedLLM: false,
 			}
 		} catch (error) {
 			return {
@@ -495,8 +583,156 @@ export class SkillSynthesizer {
 
 	/**
 	 * Synthesize a skill from a learning signal (doom loop resolution)
+	 * Uses the configured synthesis strategy
 	 */
 	synthesizeFromSignal(signal: LearningSignal): SynthesisResult {
+		// For template-only mode, use the original template synthesis
+		if (this.config.synthesisStrategy === "template") {
+			return this.synthesizeFromSignalWithTemplate(signal)
+		}
+
+		// For LLM or hybrid mode, we need context for async synthesis
+		// Return template result as sync fallback
+		return this.synthesizeFromSignalWithTemplate(signal)
+	}
+
+	/**
+	 * Synthesize a skill from a learning signal with context (async, for LLM)
+	 * This is the main entry point for hybrid synthesis
+	 */
+	async synthesizeFromSignalAsync(signal: LearningSignal, context: SynthesisContext): Promise<SynthesisResult> {
+		const strategy = this.config.synthesisStrategy
+
+		// Template-only: use template synthesis
+		if (strategy === "template") {
+			return this.synthesizeFromSignalWithTemplate(signal)
+		}
+
+		// LLM-only: use LLM synthesis (no fallback on failure)
+		if (strategy === "llm") {
+			if (!this.llmSynthesizer || !this.llmSynthesizer.isAvailable()) {
+				return {
+					success: false,
+					error: "LLM synthesis not available (no API provider configured)",
+				}
+			}
+
+			const llmResult = await this.llmSynthesizer.synthesizeFromDoomLoop(signal, context)
+			return this.convertLLMResult(llmResult, signal)
+		}
+
+		// Hybrid: try LLM first, fallback to template
+		if (strategy === "hybrid") {
+			// Check if LLM is available
+			if (this.llmSynthesizer && this.llmSynthesizer.isAvailable()) {
+				try {
+					const llmResult = await this.llmSynthesizer.synthesizeFromDoomLoop(signal, context)
+
+					if (llmResult.success && llmResult.code) {
+						return this.convertLLMResult(llmResult, signal)
+					}
+
+					// LLM failed, fall through to template
+					console.log("[SkillSynthesizer] LLM synthesis failed, falling back to template:", llmResult.error)
+				} catch (error) {
+					console.log("[SkillSynthesizer] LLM synthesis error, falling back to template:", error)
+				}
+			}
+
+			// Fallback to template synthesis
+			return this.synthesizeFromSignalWithTemplate(signal)
+		}
+
+		// Default fallback
+		return this.synthesizeFromSignalWithTemplate(signal)
+	}
+
+	/**
+	 * Synthesize with LLM directly (bypasses strategy, for testing)
+	 */
+	async synthesizeWithLLM(signal: LearningSignal, context: SynthesisContext): Promise<SynthesisResult> {
+		if (!this.llmSynthesizer) {
+			this.initializeLLMSynthesizer()
+		}
+
+		if (!this.llmSynthesizer || !this.llmSynthesizer.isAvailable()) {
+			return {
+				success: false,
+				error: "LLM synthesis not available (no API provider configured)",
+			}
+		}
+
+		const llmResult = await this.llmSynthesizer.synthesizeFromDoomLoop(signal, context)
+		return this.convertLLMResult(llmResult, signal)
+	}
+
+	/**
+	 * Convert LLM synthesis result to SynthesisResult
+	 */
+	private convertLLMResult(
+		llmResult: import("@roo-code/types").LLMSynthesisResult,
+		signal: LearningSignal,
+	): SynthesisResult {
+		if (!llmResult.success || !llmResult.code) {
+			return {
+				success: false,
+				error: llmResult.error,
+				usedLLM: true,
+			}
+		}
+
+		const skill = this.generateMetadataFromLLM(llmResult, signal)
+		const testCode = this.generateTestCode(skill)
+
+		return {
+			success: true,
+			skill,
+			code: llmResult.code,
+			testCode,
+			usedLLM: true,
+			explanation: llmResult.explanation,
+			refinementAttempts: llmResult.refinementAttempts,
+		}
+	}
+
+	/**
+	 * Generate metadata from LLM result
+	 */
+	private generateMetadataFromLLM(
+		llmResult: import("@roo-code/types").LLMSynthesisResult,
+		signal: LearningSignal,
+	): SkillMetadata {
+		const now = Date.now()
+		const name = llmResult.suggestedName ?? this.generateSkillName(signal)
+		const id = this.generateSkillId(name)
+
+		return {
+			id,
+			name,
+			description: llmResult.suggestedDescription ?? signal.description,
+			type: "workflow" as SkillType,
+			runtime: this.config.defaultRuntime,
+			scope: this.config.defaultScope,
+			implementationPath: `${id}.ts`,
+			parameters: {},
+			tags: [signal.type, "llm-synthesized"],
+			usageCount: 0,
+			successCount: 0,
+			failureCount: 0,
+			active: true,
+			version: "1.0.0",
+			createdAt: now,
+			updatedAt: now,
+			sourceProposalId: undefined,
+			author: this.config.author,
+			permissions: llmResult.requiredPermissions,
+		}
+	}
+
+	/**
+	 * Synthesize a skill from a learning signal using templates only
+	 */
+	private synthesizeFromSignalWithTemplate(signal: LearningSignal): SynthesisResult {
 		// Extract information from the signal
 		const context = signal.context ?? {}
 		const toolName = context.toolName as string | undefined
@@ -544,7 +780,11 @@ export class SkillSynthesizer {
 			sourceSignalId: signal.id,
 		}
 
-		return this.synthesize(request)
+		const result = this.synthesize(request)
+		return {
+			...result,
+			usedLLM: false,
+		}
 	}
 
 	/**
@@ -577,6 +817,20 @@ export class SkillSynthesizer {
 			return false
 		}
 		return this.templates.delete(id)
+	}
+
+	/**
+	 * Get current synthesis strategy
+	 */
+	getSynthesisStrategy(): SynthesisStrategy {
+		return this.config.synthesisStrategy
+	}
+
+	/**
+	 * Get LLM synthesizer instance (for testing/metrics)
+	 */
+	getLLMSynthesizer(): LLMSkillSynthesizer | undefined {
+		return this.llmSynthesizer
 	}
 
 	// ==========================================================================
