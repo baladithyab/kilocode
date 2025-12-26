@@ -20,7 +20,9 @@ import type {
 	SkillExecutionResult,
 	SkillExecutionStatus,
 	SkillRuntime,
+	SkillExecutionMode,
 } from "@roo-code/types"
+import { DockerSkillExecutor } from "../execution/DockerSkillExecutor"
 
 /** Configuration for SkillExecutor */
 export interface SkillExecutorConfig {
@@ -35,6 +37,9 @@ export interface SkillExecutorConfig {
 
 	/** Working directory for execution */
 	workingDirectory?: string
+
+	/** Execution mode */
+	executionMode?: SkillExecutionMode
 }
 
 /** Execution function type */
@@ -46,6 +51,7 @@ type ExecutionFunction = (...args: unknown[]) => Promise<unknown> | unknown
 export class SkillExecutor {
 	private config: Required<SkillExecutorConfig>
 	private executionHistory: Map<string, SkillExecutionResult[]> = new Map()
+	private dockerExecutor: DockerSkillExecutor
 
 	constructor(config: SkillExecutorConfig = {}) {
 		this.config = {
@@ -53,7 +59,11 @@ export class SkillExecutor {
 			maxOutputSize: config.maxOutputSize ?? 1048576, // 1MB
 			enableSandbox: config.enableSandbox ?? false,
 			workingDirectory: config.workingDirectory ?? process.cwd(),
+			executionMode: config.executionMode ?? "default",
 		}
+		this.dockerExecutor = new DockerSkillExecutor({
+			timeout: this.config.defaultTimeout,
+		})
 	}
 
 	/**
@@ -64,6 +74,12 @@ export class SkillExecutor {
 		implementation: string,
 		context: Partial<SkillExecutionContext> = {},
 	): Promise<SkillExecutionResult> {
+		// Check execution mode
+		// We can override mode in context if needed, but for now use config
+		if (this.config.executionMode === "docker-isolated") {
+			return this.dockerExecutor.execute(skill, implementation, context)
+		}
+
 		const executionId = this.generateExecutionId()
 		const startTime = Date.now()
 		const timeout = context.timeout ?? this.config.defaultTimeout

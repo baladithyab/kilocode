@@ -47,6 +47,12 @@ describe("Phase 4 Integration: Autonomous Evolution System", () => {
 				enabled: true,
 				autonomyLevel: 2, // Full autonomy
 				councilEnabled: true,
+				// Phase 5 flags
+				enableAutonomousExecution: true,
+				enableSkillSynthesis: true,
+				enableMultiAgentCouncil: true,
+				enableSelfHealing: true,
+				enablePerformanceAnalytics: true,
 			},
 			workspacePath,
 			enableAutonomousExecution: true,

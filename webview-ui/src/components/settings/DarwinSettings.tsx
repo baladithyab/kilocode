@@ -184,11 +184,31 @@ export const DarwinSettings = ({ darwin, setCachedStateField, ...props }: Darwin
 					{t("settings:darwin.features.title", { defaultValue: "Advanced Features" })}
 				</div>
 
+				{/* Autonomous Execution */}
+				<div className="flex flex-col gap-1 mb-3">
+					<VSCodeCheckbox
+						checked={config.enableAutonomousExecution}
+						onChange={(e: any) => setDarwinField("enableAutonomousExecution", e.target.checked)}
+						disabled={!config.enabled}
+						data-testid="darwin-autonomous-execution-checkbox">
+						<span className="font-medium">
+							{t("settings:darwin.enableAutonomousExecution.label", {
+								defaultValue: "Autonomous Execution",
+							})}
+						</span>
+					</VSCodeCheckbox>
+					<div className="text-vscode-descriptionForeground text-sm ml-5 mt-1">
+						{t("settings:darwin.enableAutonomousExecution.description", {
+							defaultValue: "Allow Darwin to automatically execute approved proposals.",
+						})}
+					</div>
+				</div>
+
 				{/* Skill Synthesis */}
 				<div className="flex flex-col gap-1 mb-3">
 					<VSCodeCheckbox
-						checked={config.skillSynthesis}
-						onChange={(e: any) => setDarwinField("skillSynthesis", e.target.checked)}
+						checked={config.enableSkillSynthesis}
+						onChange={(e: any) => setDarwinField("enableSkillSynthesis", e.target.checked)}
 						disabled={!config.enabled}
 						data-testid="darwin-skill-synthesis-checkbox">
 						<span className="font-medium">
@@ -199,6 +219,65 @@ export const DarwinSettings = ({ darwin, setCachedStateField, ...props }: Darwin
 						{t("settings:darwin.skillSynthesis.description", {
 							defaultValue:
 								"Allow Darwin to create new tools and patterns based on successful workflows.",
+						})}
+					</div>
+				</div>
+
+				{/* Multi-Agent Council */}
+				<div className="flex flex-col gap-1 mb-3">
+					<VSCodeCheckbox
+						checked={config.enableMultiAgentCouncil}
+						onChange={(e: any) => setDarwinField("enableMultiAgentCouncil", e.target.checked)}
+						disabled={!config.enabled}
+						data-testid="darwin-multi-agent-council-checkbox">
+						<span className="font-medium">
+							{t("settings:darwin.enableMultiAgentCouncil.label", {
+								defaultValue: "Multi-Agent Council",
+							})}
+						</span>
+					</VSCodeCheckbox>
+					<div className="text-vscode-descriptionForeground text-sm ml-5 mt-1">
+						{t("settings:darwin.enableMultiAgentCouncil.description", {
+							defaultValue:
+								"Enable specialized agents (Analyst, Security, Reviewer) to review proposals.",
+						})}
+					</div>
+				</div>
+
+				{/* Self-Healing */}
+				<div className="flex flex-col gap-1 mb-3">
+					<VSCodeCheckbox
+						checked={config.enableSelfHealing}
+						onChange={(e: any) => setDarwinField("enableSelfHealing", e.target.checked)}
+						disabled={!config.enabled}
+						data-testid="darwin-self-healing-checkbox">
+						<span className="font-medium">
+							{t("settings:darwin.enableSelfHealing.label", { defaultValue: "Self-Healing" })}
+						</span>
+					</VSCodeCheckbox>
+					<div className="text-vscode-descriptionForeground text-sm ml-5 mt-1">
+						{t("settings:darwin.enableSelfHealing.description", {
+							defaultValue: "Automatically detect and fix common errors and doom loops.",
+						})}
+					</div>
+				</div>
+
+				{/* Performance Analytics */}
+				<div className="flex flex-col gap-1 mb-3">
+					<VSCodeCheckbox
+						checked={config.enablePerformanceAnalytics}
+						onChange={(e: any) => setDarwinField("enablePerformanceAnalytics", e.target.checked)}
+						disabled={!config.enabled}
+						data-testid="darwin-performance-analytics-checkbox">
+						<span className="font-medium">
+							{t("settings:darwin.enablePerformanceAnalytics.label", {
+								defaultValue: "Performance Analytics",
+							})}
+						</span>
+					</VSCodeCheckbox>
+					<div className="text-vscode-descriptionForeground text-sm ml-5 mt-1">
+						{t("settings:darwin.enablePerformanceAnalytics.description", {
+							defaultValue: "Track and analyze agent performance metrics over time.",
 						})}
 					</div>
 				</div>
@@ -221,23 +300,44 @@ export const DarwinSettings = ({ darwin, setCachedStateField, ...props }: Darwin
 						})}
 					</div>
 				</div>
+			</Section>
 
-				{/* Council System */}
-				<div className="flex flex-col gap-1">
-					<VSCodeCheckbox
-						checked={config.councilEnabled}
-						onChange={(e: any) => setDarwinField("councilEnabled", e.target.checked)}
-						disabled={!config.enabled}
-						data-testid="darwin-council-checkbox">
-						<span className="font-medium">
-							{t("settings:darwin.councilEnabled.label", { defaultValue: "Council Review System" })}
-						</span>
-					</VSCodeCheckbox>
-					<div className="text-vscode-descriptionForeground text-sm ml-5 mt-1">
-						{t("settings:darwin.councilEnabled.description", {
-							defaultValue: "Enable multi-agent review of evolution proposals for quality and safety.",
+			{/* Execution Settings */}
+			<Section>
+				<div className="font-medium mb-3">
+					{t("settings:darwin.execution.title", { defaultValue: "Execution Environment" })}
+				</div>
+
+				{/* Skill Execution Mode */}
+				<div className="flex flex-col gap-2 mb-3">
+					<div className="font-medium text-sm">
+						{t("settings:darwin.skillExecutionMode.label", { defaultValue: "Skill Execution Mode" })}
+					</div>
+					<div className="text-vscode-descriptionForeground text-sm">
+						{t("settings:darwin.skillExecutionMode.description", {
+							defaultValue: "Choose how synthesized skills are executed.",
 						})}
 					</div>
+					<VSCodeDropdown
+						value={config.skillExecutionMode}
+						onChange={(e: any) => setDarwinField("skillExecutionMode", e.target.value)}
+						disabled={!config.enabled}
+						data-testid="darwin-execution-mode-dropdown">
+						<VSCodeOption value="default">
+							{t("settings:darwin.skillExecutionMode.default", { defaultValue: "Default (Standard)" })}
+						</VSCodeOption>
+						<VSCodeOption value="docker-isolated">
+							{t("settings:darwin.skillExecutionMode.docker", {
+								defaultValue: "Docker Isolated (Recommended)",
+							})}
+						</VSCodeOption>
+					</VSCodeDropdown>
+					{config.skillExecutionMode === "docker-isolated" && (
+						<div className="flex items-center gap-2 text-xs text-vscode-descriptionForeground mt-1">
+							<AlertTriangle className="w-3 h-3" />
+							<span>Requires Docker to be installed and running.</span>
+						</div>
+					)}
 				</div>
 			</Section>
 		</div>

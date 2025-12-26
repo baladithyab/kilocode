@@ -31,6 +31,14 @@ export const AUTONOMY_LABELS: Record<AutonomyLevel, string> = {
 // =============================================================================
 
 /**
+ * Skill execution mode
+ * - default: Execute in standard environment (simulated or direct)
+ * - docker-isolated: Execute in containerized Docker environment
+ */
+export const skillExecutionModeSchema = z.enum(["default", "docker-isolated"])
+export type SkillExecutionMode = z.infer<typeof skillExecutionModeSchema>
+
+/**
  * Schema for Darwin system configuration
  */
 export const darwinConfigSchema = z.object({
@@ -54,6 +62,24 @@ export const darwinConfigSchema = z.object({
 
 	/** Whether the Council review system is enabled */
 	councilEnabled: z.boolean().default(true),
+
+	/** Skill execution mode */
+	skillExecutionMode: skillExecutionModeSchema.default("default"),
+
+	/** Feature Flag: Enable autonomous execution engine */
+	enableAutonomousExecution: z.boolean().default(false),
+
+	/** Feature Flag: Enable skill synthesis capabilities */
+	enableSkillSynthesis: z.boolean().default(false),
+
+	/** Feature Flag: Enable multi-agent council */
+	enableMultiAgentCouncil: z.boolean().default(false),
+
+	/** Feature Flag: Enable self-healing capabilities */
+	enableSelfHealing: z.boolean().default(false),
+
+	/** Feature Flag: Enable performance analytics */
+	enablePerformanceAnalytics: z.boolean().default(false),
 })
 
 export type DarwinConfig = z.infer<typeof darwinConfigSchema>
@@ -69,6 +95,12 @@ export const DEFAULT_DARWIN_CONFIG: DarwinConfigWithLLMSynthesis = {
 	skillSynthesis: false,
 	configEvolution: false,
 	councilEnabled: true,
+	skillExecutionMode: "default",
+	enableAutonomousExecution: false,
+	enableSkillSynthesis: false,
+	enableMultiAgentCouncil: false,
+	enableSelfHealing: false,
+	enablePerformanceAnalytics: false,
 	// Phase 4B defaults
 	enableRealMultiAgent: false,
 	multiAgentTimeout: 300000,
@@ -1808,7 +1840,7 @@ export type DarwinConfigWithLLMSynthesis = z.infer<typeof darwinConfigWithLLMSyn
 /**
  * Extended evolution state with Phase 4C fields
  */
-export const evolutionStateWithLLMSynthesisSchema = evolutionStateWithAutonomySchema.extend({
+export const evolutionStateWithLLMSynthesisSchema = evolutionStateSchema.extend({
 	/** LLM synthesis configuration */
 	llmSynthesisConfig: llmSynthesisConfigSchema.optional(),
 

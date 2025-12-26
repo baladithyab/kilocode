@@ -154,7 +154,7 @@ export class DarwinConfig {
 	 * Check if real multi-agent council is enabled (Phase 4B)
 	 */
 	get realMultiAgentEnabled(): boolean {
-		return this.config.enableRealMultiAgent ?? false
+		return this.config.enableMultiAgentCouncil || (this.config.enableRealMultiAgent ?? false)
 	}
 
 	/**
@@ -277,7 +277,18 @@ export class DarwinConfig {
 	/**
 	 * Check if a specific feature is enabled based on current config
 	 */
-	isFeatureEnabled(feature: "trace" | "skills" | "config" | "council" | "multiAgent" | "llmSynthesis"): boolean {
+	isFeatureEnabled(
+		feature:
+			| "trace"
+			| "skills"
+			| "config"
+			| "council"
+			| "multiAgent"
+			| "llmSynthesis"
+			| "autonomous"
+			| "selfHealing"
+			| "analytics",
+	): boolean {
 		if (!this.enabled) {
 			return false
 		}
@@ -286,7 +297,7 @@ export class DarwinConfig {
 			case "trace":
 				return this.traceCaptureEnabled
 			case "skills":
-				return this.skillSynthesisEnabled
+				return this.skillSynthesisEnabled || this.config.enableSkillSynthesis
 			case "config":
 				return this.configEvolutionEnabled
 			case "council":
@@ -295,6 +306,12 @@ export class DarwinConfig {
 				return this.realMultiAgentEnabled
 			case "llmSynthesis":
 				return this.llmSynthesisEnabled
+			case "autonomous":
+				return this.config.enableAutonomousExecution
+			case "selfHealing":
+				return this.config.enableSelfHealing
+			case "analytics":
+				return this.config.enablePerformanceAnalytics
 			default:
 				return false
 		}
