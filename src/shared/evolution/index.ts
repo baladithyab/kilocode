@@ -43,5 +43,21 @@ export {
 // Export council system
 export { Council, type CouncilDecision, type CouncilConfig, type VotingPolicy } from "./council"
 
+// Export skills library (Phase 3)
+export {
+	SkillLibrary,
+	SkillValidator,
+	SkillExecutor,
+	SkillSynthesizer,
+	type SkillLibraryConfig,
+	type SkillValidatorConfig,
+	type SkillExecutorConfig,
+	type SkillSynthesizerConfig,
+	type DangerousPattern,
+} from "./skills"
+
+// Export change application (Phase 3)
+export { ChangeApplicator, type ChangeApplicatorConfig } from "./application"
+
 // Export main service
 export { DarwinService } from "./DarwinService"
