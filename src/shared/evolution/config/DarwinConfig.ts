@@ -146,6 +146,27 @@ export class DarwinConfig {
 		return this.config.councilEnabled
 	}
 
+	/**
+	 * Check if performance analytics is enabled
+	 */
+	get analyticsEnabled(): boolean {
+		return this.config.enablePerformanceAnalytics
+	}
+
+	/**
+	 * Get the storage backend type
+	 */
+	get storageBackend(): "jsonl" | "sqlite" {
+		return this.config.storageBackend ?? "jsonl"
+	}
+
+	/**
+	 * Check if auto-migration is enabled
+	 */
+	get autoMigrate(): boolean {
+		return this.config.autoMigrate ?? false
+	}
+
 	// ==========================================================================
 	// Phase 4B: Multi-Agent Council Configuration
 	// ==========================================================================

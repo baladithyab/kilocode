@@ -10,6 +10,8 @@
 import * as fs from "fs"
 import * as path from "path"
 import type { TraceEvent } from "@roo-code/types"
+import { traceQueries } from "../db"
+import { v4 as uuidv4 } from "uuid"
 
 /** Storage configuration options */
 export interface TraceStorageConfig {
@@ -19,6 +21,8 @@ export interface TraceStorageConfig {
 	maxFileSizeBytes?: number
 	/** Number of days to retain trace files (default: 30) */
 	retentionDays?: number
+	/** Storage backend to use (default: "jsonl") */
+	storageBackend?: "jsonl" | "sqlite"
 }
 
 /** Default configuration values */
@@ -29,13 +33,13 @@ const TRACES_DIR = ".kilocode/evolution/traces"
 /**
  * TraceStorage manages persistence of trace events to disk
  *
- * Uses JSONL (JSON Lines) format for efficient append operations
- * and easy parsing of individual events.
+ * Supports both JSONL (file-based) and SQLite (database) backends.
  */
 export class TraceStorage {
 	private readonly tracesDir: string
 	private readonly maxFileSizeBytes: number
 	private readonly retentionDays: number
+	private readonly storageBackend: "jsonl" | "sqlite"
 	private currentFilePath: string | null = null
 	private writeBuffer: string[] = []
 	private flushTimer: NodeJS.Timeout | null = null
@@ -45,6 +49,7 @@ export class TraceStorage {
 		this.tracesDir = path.join(config.workspacePath, TRACES_DIR)
 		this.maxFileSizeBytes = config.maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE
 		this.retentionDays = config.retentionDays ?? DEFAULT_RETENTION_DAYS
+		this.storageBackend = config.storageBackend ?? "jsonl"
 	}
 
 	/**
@@ -56,7 +61,10 @@ export class TraceStorage {
 		}
 
 		try {
-			await fs.promises.mkdir(this.tracesDir, { recursive: true })
+			if (this.storageBackend === "jsonl") {
+				await fs.promises.mkdir(this.tracesDir, { recursive: true })
+			}
+			// SQLite is initialized lazily via db connection
 			this.isInitialized = true
 		} catch (error) {
 			console.error("[TraceStorage] Failed to create traces directory:", error)
@@ -123,6 +131,26 @@ export class TraceStorage {
 			await this.initialize()
 		}
 
+		if (this.storageBackend === "sqlite") {
+			try {
+				await traceQueries.create({
+					id: uuidv4(),
+					timestamp: event.timestamp,
+					event: event.type,
+					toolId: event.tool,
+					status: event.error ? "error" : "success",
+					duration: event.duration,
+					error: event.error,
+					context: JSON.stringify(event.context),
+					metadata: JSON.stringify(event.metadata),
+					createdAt: new Date(),
+				})
+			} catch (error) {
+				console.error("[TraceStorage] Failed to insert trace into SQLite:", error)
+			}
+			return
+		}
+
 		const line = JSON.stringify(event) + "\n"
 		this.writeBuffer.push(line)
 
@@ -136,6 +164,10 @@ export class TraceStorage {
 	 * Flush buffered writes to disk
 	 */
 	async flush(): Promise<void> {
+		if (this.storageBackend === "sqlite") {
+			return
+		}
+
 		if (this.flushTimer) {
 			clearTimeout(this.flushTimer)
 			this.flushTimer = null
@@ -179,6 +211,27 @@ export class TraceStorage {
 			await this.initialize()
 		}
 
+		if (this.storageBackend === "sqlite") {
+			const start = new Date(date)
+			start.setHours(0, 0, 0, 0)
+			const end = new Date(date)
+			end.setHours(23, 59, 59, 999)
+
+			const traces = await traceQueries.getByTimeRange(start.getTime(), end.getTime())
+			return traces.map(
+				(t) =>
+					({
+						type: t.event as any, // Cast to any as TraceEvent type might be strict
+						timestamp: t.timestamp,
+						tool: t.toolId || undefined,
+						error: t.error || undefined,
+						duration: t.duration || undefined,
+						context: t.context ? JSON.parse(t.context as string) : undefined,
+						metadata: t.metadata ? JSON.parse(t.metadata as string) : undefined,
+					}) as TraceEvent,
+			)
+		}
+
 		const dateStr = date.toISOString().split("T")[0]
 		const traces: TraceEvent[] = []
 
@@ -218,6 +271,22 @@ export class TraceStorage {
 			await this.initialize()
 		}
 
+		if (this.storageBackend === "sqlite") {
+			const traces = await traceQueries.getByTimeRange(timestamp, Date.now())
+			return traces.map(
+				(t) =>
+					({
+						type: t.event as any,
+						timestamp: t.timestamp,
+						tool: t.toolId || undefined,
+						error: t.error || undefined,
+						duration: t.duration || undefined,
+						context: t.context ? JSON.parse(t.context as string) : undefined,
+						metadata: t.metadata ? JSON.parse(t.metadata as string) : undefined,
+					}) as TraceEvent,
+			)
+		}
+
 		const startDate = new Date(timestamp)
 		const today = new Date()
 		const traces: TraceEvent[] = []
@@ -244,6 +313,30 @@ export class TraceStorage {
 			await this.initialize()
 		}
 
+		if (this.storageBackend === "sqlite") {
+			const today = new Date()
+			const startDate = new Date()
+			startDate.setDate(today.getDate() - maxDays)
+
+			const traces = await traceQueries.getByTimeRange(startDate.getTime(), today.getTime())
+			// Filter in memory for now as we don't have taskId in schema yet
+			// TODO: Add taskId to traces table
+			return traces
+				.map(
+					(t) =>
+						({
+							type: t.event as any,
+							timestamp: t.timestamp,
+							tool: t.toolId || undefined,
+							error: t.error || undefined,
+							duration: t.duration || undefined,
+							context: t.context ? JSON.parse(t.context as string) : undefined,
+							metadata: t.metadata ? JSON.parse(t.metadata as string) : undefined,
+						}) as TraceEvent,
+				)
+				.filter((t) => t.context?.taskId === taskId || t.metadata?.taskId === taskId)
+		}
+
 		const today = new Date()
 		const startDate = new Date()
 		startDate.setDate(today.getDate() - maxDays)
@@ -258,6 +351,12 @@ export class TraceStorage {
 	async pruneOldTraces(): Promise<number> {
 		if (!this.isInitialized) {
 			await this.initialize()
+		}
+
+		if (this.storageBackend === "sqlite") {
+			// SQLite pruning not implemented yet
+			// Could use a DELETE query with timestamp < cutoff
+			return 0
 		}
 
 		const cutoffDate = new Date()
@@ -311,6 +410,16 @@ export class TraceStorage {
 	}> {
 		if (!this.isInitialized) {
 			await this.initialize()
+		}
+
+		if (this.storageBackend === "sqlite") {
+			// TODO: Implement SQLite stats
+			return {
+				totalFiles: 1,
+				totalSizeBytes: 0,
+				oldestTraceDate: null,
+				newestTraceDate: null,
+			}
 		}
 
 		let totalFiles = 0

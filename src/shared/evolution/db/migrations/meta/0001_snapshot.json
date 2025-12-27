@@ -1,0 +1,496 @@
+{
+	"version": "6",
+	"dialect": "sqlite",
+	"id": "6ca6792b-41a3-40b4-abf0-b5990d4ed332",
+	"prevId": "7dfdda28-8d53-46ec-9c96-41f5a3bb71a0",
+	"tables": {
+		"council_votes": {
+			"name": "council_votes",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"proposal_id": {
+					"name": "proposal_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"agent": {
+					"name": "agent",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"vote": {
+					"name": "vote",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"confidence": {
+					"name": "confidence",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"reasoning": {
+					"name": "reasoning",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"council_votes_proposal_id_idx": {
+					"name": "council_votes_proposal_id_idx",
+					"columns": ["proposal_id"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {
+				"council_votes_proposal_id_proposals_id_fk": {
+					"name": "council_votes_proposal_id_proposals_id_fk",
+					"tableFrom": "council_votes",
+					"tableTo": "proposals",
+					"columnsFrom": ["proposal_id"],
+					"columnsTo": ["id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {}
+		},
+		"execution_history": {
+			"name": "execution_history",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"proposal_id": {
+					"name": "proposal_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"skill_id": {
+					"name": "skill_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"status": {
+					"name": "status",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"started_at": {
+					"name": "started_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"completed_at": {
+					"name": "completed_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"result": {
+					"name": "result",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"error": {
+					"name": "error",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"execution_history_proposal_id_proposals_id_fk": {
+					"name": "execution_history_proposal_id_proposals_id_fk",
+					"tableFrom": "execution_history",
+					"tableTo": "proposals",
+					"columnsFrom": ["proposal_id"],
+					"columnsTo": ["id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				},
+				"execution_history_skill_id_skills_id_fk": {
+					"name": "execution_history_skill_id_skills_id_fk",
+					"tableFrom": "execution_history",
+					"tableTo": "skills",
+					"columnsFrom": ["skill_id"],
+					"columnsTo": ["id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {}
+		},
+		"proposals": {
+			"name": "proposals",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"type": {
+					"name": "type",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"title": {
+					"name": "title",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"description": {
+					"name": "description",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"payload": {
+					"name": "payload",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"risk": {
+					"name": "risk",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"status": {
+					"name": "status",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"source_signal_id": {
+					"name": "source_signal_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"reviewed_by": {
+					"name": "reviewed_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"review_notes": {
+					"name": "review_notes",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"rollback_data": {
+					"name": "rollback_data",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"proposals_status_idx": {
+					"name": "proposals_status_idx",
+					"columns": ["status"],
+					"isUnique": false
+				},
+				"proposals_created_at_idx": {
+					"name": "proposals_created_at_idx",
+					"columns": ["created_at"],
+					"isUnique": false
+				},
+				"proposals_risk_idx": {
+					"name": "proposals_risk_idx",
+					"columns": ["risk"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {}
+		},
+		"skills": {
+			"name": "skills",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"name": {
+					"name": "name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"description": {
+					"name": "description",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"code": {
+					"name": "code",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"language": {
+					"name": "language",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"tags": {
+					"name": "tags",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"usage_count": {
+					"name": "usage_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false,
+					"default": 0
+				},
+				"success_rate": {
+					"name": "success_rate",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false,
+					"default": 0
+				},
+				"last_used": {
+					"name": "last_used",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"skills_usage_count_idx": {
+					"name": "skills_usage_count_idx",
+					"columns": ["usage_count"],
+					"isUnique": false
+				},
+				"skills_success_rate_idx": {
+					"name": "skills_success_rate_idx",
+					"columns": ["success_rate"],
+					"isUnique": false
+				},
+				"skills_last_used_idx": {
+					"name": "skills_last_used_idx",
+					"columns": ["last_used"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {}
+		},
+		"traces": {
+			"name": "traces",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"timestamp": {
+					"name": "timestamp",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"event": {
+					"name": "event",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"tool_id": {
+					"name": "tool_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"status": {
+					"name": "status",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"duration": {
+					"name": "duration",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"error": {
+					"name": "error",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"context": {
+					"name": "context",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"metadata": {
+					"name": "metadata",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"traces_timestamp_idx": {
+					"name": "traces_timestamp_idx",
+					"columns": ["timestamp"],
+					"isUnique": false
+				},
+				"traces_event_idx": {
+					"name": "traces_event_idx",
+					"columns": ["event"],
+					"isUnique": false
+				},
+				"traces_status_idx": {
+					"name": "traces_status_idx",
+					"columns": ["status"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {}
+		}
+	},
+	"views": {},
+	"enums": {},
+	"_meta": {
+		"schemas": {},
+		"tables": {},
+		"columns": {}
+	},
+	"internal": {
+		"indexes": {}
+	}
+}

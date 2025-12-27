@@ -10,6 +10,7 @@
 
 import * as path from "path"
 import type { SkillMetadata, SkillsIndex, SkillScope, SkillRuntime, SkillType } from "@roo-code/types"
+import { skillQueries } from "../db"
 
 /** Configuration for the SkillLibrary */
 export interface SkillLibraryConfig {
@@ -24,6 +25,9 @@ export interface SkillLibraryConfig {
 
 	/** Maximum number of skills to cache (default: 100) */
 	maxCacheSize?: number
+
+	/** Storage backend to use (default: "jsonl") */
+	storageBackend?: "jsonl" | "sqlite"
 }
 
 /** File system interface for abstraction */
@@ -124,6 +128,7 @@ export class SkillLibrary {
 			skillsDir: config.skillsDir ?? ".kilocode/skills",
 			enableCache: config.enableCache ?? true,
 			maxCacheSize: config.maxCacheSize ?? 100,
+			storageBackend: config.storageBackend ?? "jsonl",
 		}
 		this.fs = fs ?? new InMemoryFileSystem()
 	}
@@ -169,13 +174,35 @@ export class SkillLibrary {
 		// Validate metadata
 		this.validateMetadata(metadata)
 
-		// Write implementation file
-		const implPath = path.join(this.getSkillsPath(metadata.scope), metadata.implementationPath)
-		await this.fs.writeFile(implPath, implementation)
+		if (this.config.storageBackend === "sqlite") {
+			try {
+				await skillQueries.create({
+					id: metadata.id,
+					name: metadata.name,
+					description: metadata.description,
+					code: implementation,
+					language:
+						metadata.runtime === "python" ? "python" : metadata.runtime === "shell" ? "bash" : "typescript",
+					tags: JSON.stringify(metadata.tags),
+					usageCount: metadata.usageCount,
+					successRate: metadata.successRate,
+					lastUsed: metadata.lastUsedAt !== undefined ? new Date(metadata.lastUsedAt) : null,
+					createdAt: new Date(metadata.createdAt),
+					updatedAt: new Date(metadata.updatedAt),
+				})
+			} catch (error) {
+				console.error("[SkillLibrary] Error adding skill to SQLite:", error)
+				throw error
+			}
+		} else {
+			// Write implementation file
+			const implPath = path.join(this.getSkillsPath(metadata.scope), metadata.implementationPath)
+			await this.fs.writeFile(implPath, implementation)
 
-		// Write metadata file
-		const metadataPath = path.join(this.getSkillsPath(metadata.scope), `${metadata.id}.json`)
-		await this.fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
+			// Write metadata file
+			const metadataPath = path.join(this.getSkillsPath(metadata.scope), `${metadata.id}.json`)
+			await this.fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
+		}
 
 		// Update cache
 		if (this.config.enableCache) {
@@ -195,6 +222,33 @@ export class SkillLibrary {
 	async searchSkills(query: string, limit: number = 10): Promise<SkillMetadata[]> {
 		if (!this.isInitialized) {
 			await this.initialize()
+		}
+
+		if (this.config.storageBackend === "sqlite") {
+			const results = await skillQueries.search(query)
+			return results.slice(0, limit).map(
+				(s) =>
+					({
+						id: s.id,
+						name: s.name,
+						description: s.description || "",
+						implementationPath: "", // Not stored in SQLite metadata
+						scope: "project", // Default to project for now
+						type: "mcp_tool", // Default
+						runtime: s.language === "python" ? "python" : s.language === "bash" ? "shell" : "typescript",
+						tags: s.tags ? JSON.parse(s.tags as string) : [],
+						usageCount: s.usageCount || 0,
+						successCount: 0, // Not stored directly
+						failureCount: 0, // Not stored directly
+						successRate: s.successRate || 0,
+						lastUsedAt: s.lastUsed !== undefined ? s.lastUsed.getTime() : undefined,
+						createdAt: s.createdAt.getTime(),
+						updatedAt: s.updatedAt.getTime(),
+						active: true,
+						version: "1.0.0",
+						permissions: [],
+					}) as SkillMetadata,
+			)
 		}
 
 		if (!query.trim()) {
@@ -250,6 +304,34 @@ export class SkillLibrary {
 			return this.cache.get(id)!
 		}
 
+		if (this.config.storageBackend === "sqlite") {
+			const s = await skillQueries.getById(id)
+			if (!s) return null
+
+			const metadata: SkillMetadata = {
+				id: s.id,
+				name: s.name,
+				description: s.description || "",
+				implementationPath: "", // Not stored in SQLite metadata
+				scope: "project", // Default to project for now
+				type: "mcp_tool", // Default
+				runtime: s.language === "python" ? "python" : s.language === "bash" ? "shell" : "typescript",
+				tags: s.tags ? JSON.parse(s.tags as string) : [],
+				usageCount: s.usageCount || 0,
+				successCount: 0, // Not stored directly
+				failureCount: 0, // Not stored directly
+				successRate: s.successRate || 0,
+				lastUsedAt: s.lastUsed ? s.lastUsed.getTime() : undefined,
+				createdAt: s.createdAt.getTime(),
+				updatedAt: s.updatedAt.getTime(),
+				active: true,
+				version: "1.0.0",
+				permissions: [],
+			}
+			this.updateCache(metadata)
+			return metadata
+		}
+
 		// Try to load from disk
 		for (const scope of ["project", "global"] as SkillScope[]) {
 			try {
@@ -270,6 +352,11 @@ export class SkillLibrary {
 	 * Get skill implementation
 	 */
 	async getSkillImplementation(id: string): Promise<string | null> {
+		if (this.config.storageBackend === "sqlite") {
+			const s = await skillQueries.getById(id)
+			return s?.code || null
+		}
+
 		const metadata = await this.getSkill(id)
 		if (!metadata) {
 			return null
@@ -321,9 +408,13 @@ export class SkillLibrary {
 		// Update timestamp
 		skill.updatedAt = Date.now()
 
-		// Write updated metadata
-		const metadataPath = path.join(this.getSkillsPath(skill.scope), `${skill.id}.json`)
-		await this.fs.writeFile(metadataPath, JSON.stringify(skill, null, 2))
+		if (this.config.storageBackend === "sqlite") {
+			await skillQueries.incrementUsage(id, metrics.successCount !== undefined && metrics.successCount > 0)
+		} else {
+			// Write updated metadata
+			const metadataPath = path.join(this.getSkillsPath(skill.scope), `${skill.id}.json`)
+			await this.fs.writeFile(metadataPath, JSON.stringify(skill, null, 2))
+		}
 
 		// Update cache
 		this.updateCache(skill)

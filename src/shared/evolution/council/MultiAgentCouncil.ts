@@ -247,6 +247,12 @@ export class MultiAgentCouncil {
 			skillSynthesis: false,
 			configEvolution: false,
 			councilEnabled: true,
+			skillExecutionMode: "default",
+			enableAutonomousExecution: false,
+			enableSkillSynthesis: false,
+			enableMultiAgentCouncil: false,
+			enableSelfHealing: false,
+			enablePerformanceAnalytics: false,
 		}
 
 		// Create fallback council with compatible roles
@@ -282,20 +288,26 @@ export class MultiAgentCouncil {
 		this.emit({ type: "execution_started", execution: this.activeExecution })
 
 		try {
-			// Execute agents sequentially
+			// Execute agents in parallel
 			const results: AgentReviewResult[] = []
+			this.activeExecution.inProgress = [...this.config.activeRoles]
 
-			for (const role of this.config.activeRoles) {
+			// Create promises for all agents
+			const agentPromises = this.config.activeRoles.map(async (role) => {
 				try {
-					this.activeExecution.inProgress = [role]
-					this.emit({ type: "agent_started", role, execution: this.activeExecution })
+					this.emit({ type: "agent_started", role, execution: this.activeExecution! })
 
 					const result = await this.executeAgentReview(role, proposal, currentTask.taskId)
-					results.push(result)
 
-					this.activeExecution.completed.push(role)
-					this.activeExecution.results.push(result)
-					this.emit({ type: "agent_completed", role, result, execution: this.activeExecution })
+					// Update execution state
+					if (this.activeExecution) {
+						this.activeExecution.completed.push(role)
+						this.activeExecution.inProgress = this.activeExecution.inProgress.filter((r) => r !== role)
+						this.activeExecution.results.push(result)
+					}
+
+					this.emit({ type: "agent_completed", role, result, execution: this.activeExecution! })
+					return result
 				} catch (error) {
 					console.error(`[MultiAgentCouncil] Agent ${role} failed:`, error)
 
@@ -309,23 +321,31 @@ export class MultiAgentCouncil {
 						error: error instanceof Error ? error.message : String(error),
 					}
 
-					this.activeExecution.failed.push(role)
-					results.push(failedResult)
+					// Update execution state
+					if (this.activeExecution) {
+						this.activeExecution.failed.push(role)
+						this.activeExecution.inProgress = this.activeExecution.inProgress.filter((r) => r !== role)
+					}
+
 					this.emit({
 						type: "agent_failed",
 						role,
 						error: failedResult.error,
-						execution: this.activeExecution,
+						execution: this.activeExecution!,
 					})
 
 					// Check if we should continue on failure
 					if (!this.config.continueOnAgentFailure) {
-						throw new Error(`Agent ${role} failed and continueOnAgentFailure is false`)
+						throw error
 					}
-				} finally {
-					this.activeExecution.inProgress = []
+
+					return failedResult
 				}
-			}
+			})
+
+			// Wait for all agents to complete
+			const parallelResults = await Promise.all(agentPromises)
+			results.push(...parallelResults)
 
 			// Aggregate results
 			const decision = this.aggregateResults(proposal, results, startTime)

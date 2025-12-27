@@ -12,6 +12,8 @@
 
 import type { EvolutionProposal, CouncilVote, CouncilRole, CouncilVoteValue, DarwinConfig } from "@roo-code/types"
 import { DEFAULT_DARWIN_CONFIG } from "@roo-code/types"
+import { councilQueries } from "../db"
+import { v4 as uuidv4 } from "uuid"
 
 /** Result of council decision */
 export interface CouncilDecision {
@@ -50,6 +52,9 @@ export interface CouncilConfig {
 
 	/** Whether to include human in review (always true for high-risk) */
 	requireHumanReview?: boolean
+
+	/** Storage backend to use (default: "jsonl") */
+	storageBackend?: "jsonl" | "sqlite"
 }
 
 /**
@@ -60,12 +65,14 @@ export class Council {
 	private votingPolicy: VotingPolicy
 	private activeRoles: CouncilRole[]
 	private requireHumanReview: boolean
+	private storageBackend: "jsonl" | "sqlite"
 
 	constructor(councilConfig: CouncilConfig = {}) {
 		this.config = councilConfig.darwinConfig ?? DEFAULT_DARWIN_CONFIG
 		this.votingPolicy = councilConfig.votingPolicy ?? "majority"
 		this.activeRoles = councilConfig.activeRoles ?? ["analyst", "reviewer", "security"]
 		this.requireHumanReview = councilConfig.requireHumanReview ?? false
+		this.storageBackend = councilConfig.storageBackend ?? "jsonl"
 	}
 
 	/**
@@ -100,6 +107,23 @@ export class Council {
 		for (const role of this.activeRoles) {
 			const vote = await this.getVoteForRole(role, proposal)
 			votes.push(vote)
+
+			// Save vote to SQLite if enabled
+			if (this.storageBackend === "sqlite") {
+				try {
+					await councilQueries.createVote({
+						id: uuidv4(),
+						proposalId: proposal.id,
+						agent: role as any,
+						vote: vote.vote as any,
+						confidence: 1.0, // Simulated votes have high confidence
+						reasoning: vote.reason,
+						createdAt: new Date(vote.timestamp),
+					})
+				} catch (error) {
+					console.error("[Council] Failed to save vote to SQLite:", error)
+				}
+			}
 		}
 
 		// Aggregate votes based on policy

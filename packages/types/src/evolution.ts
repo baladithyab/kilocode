@@ -80,6 +80,12 @@ export const darwinConfigSchema = z.object({
 
 	/** Feature Flag: Enable performance analytics */
 	enablePerformanceAnalytics: z.boolean().default(false),
+
+	/** Storage backend to use */
+	storageBackend: z.enum(["jsonl", "sqlite"]).default("jsonl"),
+
+	/** Whether to auto-migrate data from JSONL to SQLite */
+	autoMigrate: z.boolean().default(false),
 })
 
 export type DarwinConfig = z.infer<typeof darwinConfigSchema>
@@ -101,6 +107,8 @@ export const DEFAULT_DARWIN_CONFIG: DarwinConfigWithLLMSynthesis = {
 	enableMultiAgentCouncil: false,
 	enableSelfHealing: false,
 	enablePerformanceAnalytics: false,
+	storageBackend: "jsonl",
+	autoMigrate: false,
 	// Phase 4B defaults
 	enableRealMultiAgent: false,
 	multiAgentTimeout: 300000,
@@ -434,7 +442,7 @@ export const skillSchema = z.object({
 export type Skill = z.infer<typeof skillSchema>
 
 // =============================================================================
-// Skill Execution & Runtime (Phase 3)
+// Skill Runtime & Execution (Phase 3)
 // =============================================================================
 
 /**

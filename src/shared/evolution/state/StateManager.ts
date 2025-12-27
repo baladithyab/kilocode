@@ -12,6 +12,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import type { EvolutionState, EvolutionProposal, LearningSignal, DarwinConfig } from "@roo-code/types"
 import { DEFAULT_EVOLUTION_STATE, DEFAULT_DARWIN_CONFIG, evolutionStateSchema } from "@roo-code/types"
+import { proposalQueries } from "../db"
 
 /** Storage file paths */
 const EVOLUTION_DIR = ".kilocode/evolution"
@@ -28,6 +29,9 @@ export interface StateManagerConfig {
 
 	/** Maximum number of recent signals to keep */
 	maxRecentSignals?: number
+
+	/** Storage backend to use (default: "jsonl") */
+	storageBackend?: "jsonl" | "sqlite"
 }
 
 /**
@@ -37,6 +41,7 @@ export class StateManager {
 	private workspacePath: string
 	private maxAppliedHistory: number
 	private maxRecentSignals: number
+	private storageBackend: "jsonl" | "sqlite"
 
 	private state: EvolutionState
 	private isInitialized: boolean = false
@@ -53,6 +58,7 @@ export class StateManager {
 		this.workspacePath = config.workspacePath
 		this.maxAppliedHistory = config.maxAppliedHistory ?? 100
 		this.maxRecentSignals = config.maxRecentSignals ?? 50
+		this.storageBackend = config.storageBackend ?? "jsonl"
 
 		this.state = { ...DEFAULT_EVOLUTION_STATE }
 	}
@@ -326,6 +332,43 @@ export class StateManager {
 	 * Load proposals from disk
 	 */
 	private async loadProposals(): Promise<void> {
+		if (this.storageBackend === "sqlite") {
+			try {
+				// Load pending proposals
+				const pending = await proposalQueries.getPending()
+				for (const p of pending) {
+					const proposal: EvolutionProposal = {
+						id: p.id,
+						type: p.type as any,
+						title: p.title,
+						description: p.description,
+						payload: p.payload ? (typeof p.payload === "string" ? JSON.parse(p.payload) : p.payload) : {},
+						risk: p.risk as any,
+						status: p.status as any,
+						sourceSignalId: p.sourceSignalId || undefined,
+						reviewedBy: p.reviewedBy || undefined,
+						reviewNotes: p.reviewNotes || undefined,
+						rollbackData: p.rollbackData
+							? typeof p.rollbackData === "string"
+								? JSON.parse(p.rollbackData)
+								: p.rollbackData
+							: undefined,
+						createdAt: p.createdAt.getTime(),
+						updatedAt: p.updatedAt.getTime(),
+					}
+					this.proposals.set(proposal.id, proposal)
+
+					// Ensure it's in pending list if not already
+					if (!this.state.pendingProposals.includes(proposal.id)) {
+						this.state.pendingProposals.push(proposal.id)
+					}
+				}
+			} catch (error) {
+				console.error("[StateManager] Error loading proposals from SQLite:", error)
+			}
+			return
+		}
+
 		try {
 			const files = await fs.readdir(this.proposalsPath)
 			const jsonFiles = files.filter((f) => f.endsWith(".json"))
@@ -351,6 +394,35 @@ export class StateManager {
 	 * Save a proposal to disk
 	 */
 	private async saveProposal(proposal: EvolutionProposal): Promise<void> {
+		if (this.storageBackend === "sqlite") {
+			try {
+				// Check if exists
+				const existing = await proposalQueries.getById(proposal.id)
+				if (existing) {
+					await proposalQueries.updateStatus(proposal.id, proposal.status, proposal.reviewNotes)
+				} else {
+					await proposalQueries.create({
+						id: proposal.id,
+						type: proposal.type,
+						title: proposal.title,
+						description: proposal.description,
+						payload: JSON.stringify(proposal.payload),
+						risk: proposal.risk,
+						status: proposal.status,
+						sourceSignalId: proposal.sourceSignalId,
+						reviewedBy: proposal.reviewedBy,
+						reviewNotes: proposal.reviewNotes,
+						rollbackData: proposal.rollbackData ? JSON.stringify(proposal.rollbackData) : undefined,
+						createdAt: new Date(proposal.createdAt),
+						updatedAt: new Date(proposal.updatedAt),
+					})
+				}
+			} catch (error) {
+				console.error("[StateManager] Error saving proposal to SQLite:", error)
+			}
+			return
+		}
+
 		const filePath = path.join(this.proposalsPath, `${proposal.id}.json`)
 		const data = JSON.stringify(proposal, null, 2)
 		await fs.writeFile(filePath, data, "utf-8")
