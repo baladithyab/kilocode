@@ -47,7 +47,7 @@ describe("Phase 6: SQLite Integration", () => {
 		const loaded = await storage.loadSince(Date.now() - 1000)
 		expect(loaded).toHaveLength(1)
 		expect(loaded[0].type).toBe("tool_error")
-		expect(loaded[0].error).toBe("Something went wrong")
+		expect(loaded[0].errorMessage).toBe("Something went wrong")
 	})
 
 	it("should store and retrieve proposals using SQLite", async () => {
@@ -100,6 +100,10 @@ describe("Phase 6: SQLite Integration", () => {
 			active: true,
 			version: "1.0.0",
 			permissions: [],
+			tags: [],
+			usageCount: 0,
+			successCount: 0,
+			failureCount: 0,
 		}
 
 		await library.addSkill(skill, "console.log('test')")

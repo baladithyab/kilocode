@@ -178,7 +178,7 @@ export const traceEventSchema = z.object({
 	summary: z.string(),
 
 	/** Additional metadata specific to the event type */
-	metadata: traceEventMetadataSchema.optional(),
+	metadata: traceEventMetadataSchema,
 
 	/** Related tool name if applicable */
 	toolName: z.string().optional(),

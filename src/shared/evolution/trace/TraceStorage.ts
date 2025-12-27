@@ -137,11 +137,11 @@ export class TraceStorage {
 					id: uuidv4(),
 					timestamp: event.timestamp,
 					event: event.type,
-					toolId: event.tool,
-					status: event.error ? "error" : "success",
-					duration: event.duration,
-					error: event.error,
-					context: JSON.stringify(event.context),
+					toolId: event.toolName,
+					status: event.errorMessage ? "error" : "success",
+					duration: (event.metadata as any)?.duration,
+					error: event.errorMessage,
+					context: JSON.stringify((event.metadata as any)?.context),
 					metadata: JSON.stringify(event.metadata),
 					createdAt: new Date(),
 				})
@@ -223,11 +223,16 @@ export class TraceStorage {
 					({
 						type: t.event as any, // Cast to any as TraceEvent type might be strict
 						timestamp: t.timestamp,
-						tool: t.toolId || undefined,
-						error: t.error || undefined,
-						duration: t.duration || undefined,
-						context: t.context ? JSON.parse(t.context as string) : undefined,
-						metadata: t.metadata ? JSON.parse(t.metadata as string) : undefined,
+						id: t.id,
+						taskId: (t.context ? JSON.parse(t.context as string) : {})?.taskId || "unknown", // Best effort to recover taskId
+						summary: t.event, // Placeholder summary
+						toolName: t.toolId || undefined,
+						errorMessage: t.error || undefined,
+						metadata: {
+							...(t.metadata ? JSON.parse(t.metadata as string) : {}),
+							duration: t.duration,
+							context: t.context ? JSON.parse(t.context as string) : undefined,
+						},
 					}) as TraceEvent,
 			)
 		}
@@ -278,11 +283,16 @@ export class TraceStorage {
 					({
 						type: t.event as any,
 						timestamp: t.timestamp,
-						tool: t.toolId || undefined,
-						error: t.error || undefined,
-						duration: t.duration || undefined,
-						context: t.context ? JSON.parse(t.context as string) : undefined,
-						metadata: t.metadata ? JSON.parse(t.metadata as string) : undefined,
+						id: t.id,
+						taskId: (t.context ? JSON.parse(t.context as string) : {})?.taskId || "unknown",
+						summary: t.event,
+						toolName: t.toolId || undefined,
+						errorMessage: t.error || undefined,
+						metadata: {
+							...(t.metadata ? JSON.parse(t.metadata as string) : {}),
+							duration: t.duration,
+							context: t.context ? JSON.parse(t.context as string) : undefined,
+						},
 					}) as TraceEvent,
 			)
 		}
@@ -327,14 +337,19 @@ export class TraceStorage {
 						({
 							type: t.event as any,
 							timestamp: t.timestamp,
-							tool: t.toolId || undefined,
-							error: t.error || undefined,
-							duration: t.duration || undefined,
-							context: t.context ? JSON.parse(t.context as string) : undefined,
-							metadata: t.metadata ? JSON.parse(t.metadata as string) : undefined,
+							id: t.id,
+							taskId: (t.context ? JSON.parse(t.context as string) : {})?.taskId || "unknown",
+							summary: t.event,
+							toolName: t.toolId || undefined,
+							errorMessage: t.error || undefined,
+							metadata: {
+								...(t.metadata ? JSON.parse(t.metadata as string) : {}),
+								duration: t.duration,
+								context: t.context ? JSON.parse(t.context as string) : undefined,
+							},
 						}) as TraceEvent,
 				)
-				.filter((t) => t.context?.taskId === taskId || t.metadata?.taskId === taskId)
+				.filter((t) => t.taskId === taskId || (t.metadata as any)?.taskId === taskId)
 		}
 
 		const today = new Date()

@@ -24,7 +24,11 @@ export const createRunSchema = z
 		description: z.string().optional(),
 		suite: z.enum(["full", "partial"]),
 		exercises: z.array(z.string()).optional(),
-		settings: rooCodeSettingsSchema.optional(),
+		settings: rooCodeSettingsSchema
+			.extend({
+				darwin: z.any().optional(),
+			})
+			.optional(),
 		concurrency: z.number().int().min(CONCURRENCY_MIN).max(CONCURRENCY_MAX),
 		timeout: z.number().int().min(TIMEOUT_MIN).max(TIMEOUT_MAX),
 		iterations: z.number().int().min(ITERATIONS_MIN).max(ITERATIONS_MAX),

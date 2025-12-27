@@ -9,8 +9,8 @@ describe("Darwin Database", () => {
 	})
 
 	it("should have required tables", async () => {
-		const tables = await db.run(sql`SELECT name FROM sqlite_master WHERE type='table'`)
-		const tableNames = tables.rows.map((r: any) => r.name)
+		const tables = await db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`)
+		const tableNames = tables.map((r: any) => r.name)
 
 		expect(tableNames).toContain("traces")
 		expect(tableNames).toContain("proposals")

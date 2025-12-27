@@ -25,7 +25,7 @@ import type {
 	AgentPromptConfig,
 	DarwinConfig,
 } from "@roo-code/types"
-import { DEFAULT_MULTI_AGENT_COUNCIL_CONFIG } from "@roo-code/types"
+import { DEFAULT_MULTI_AGENT_COUNCIL_CONFIG, DEFAULT_DARWIN_CONFIG } from "@roo-code/types"
 import { Council, type CouncilDecision, type VotingPolicy } from "./Council"
 
 /**
@@ -239,21 +239,7 @@ export class MultiAgentCouncil {
 			...DEFAULT_MULTI_AGENT_COUNCIL_CONFIG,
 			...config,
 		}
-		this.darwinConfig = darwinConfig ?? {
-			enabled: true,
-			autonomyLevel: 1,
-			traceCapture: true,
-			doomLoopThreshold: 3,
-			skillSynthesis: false,
-			configEvolution: false,
-			councilEnabled: true,
-			skillExecutionMode: "default",
-			enableAutonomousExecution: false,
-			enableSkillSynthesis: false,
-			enableMultiAgentCouncil: false,
-			enableSelfHealing: false,
-			enablePerformanceAnalytics: false,
-		}
+		this.darwinConfig = darwinConfig ?? DEFAULT_DARWIN_CONFIG
 
 		// Create fallback council with compatible roles
 		this.fallbackCouncil = new Council({

@@ -8,6 +8,7 @@
 import { MultiAgentCouncil, type TaskDelegator, type MultiAgentCouncilEvent } from "../MultiAgentCouncil"
 import { createCouncil, isMultiAgentCouncil } from "../index"
 import type { EvolutionProposal, AgentRole, MultiAgentCouncilConfig, DarwinConfig } from "@roo-code/types"
+import { DEFAULT_DARWIN_CONFIG } from "@roo-code/types"
 
 // =============================================================================
 // Test Fixtures
@@ -88,6 +89,7 @@ function createMockConfig(overrides: Partial<MultiAgentCouncilConfig> = {}): Par
 
 function createMockDarwinConfig(overrides: Partial<DarwinConfig> = {}): DarwinConfig {
 	return {
+		...DEFAULT_DARWIN_CONFIG,
 		enabled: true,
 		autonomyLevel: 1,
 		traceCapture: true,

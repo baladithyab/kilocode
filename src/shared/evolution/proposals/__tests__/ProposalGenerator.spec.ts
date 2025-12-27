@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { ProposalGenerator } from "../ProposalGenerator"
 import type { LearningSignal, DarwinConfig } from "@roo-code/types"
+import { DEFAULT_DARWIN_CONFIG } from "@roo-code/types"
 
 describe("ProposalGenerator", () => {
 	let generator: ProposalGenerator
@@ -210,6 +211,7 @@ describe("ProposalGenerator", () => {
 	describe("updateConfig", () => {
 		it("should update configuration", () => {
 			const newConfig: DarwinConfig = {
+				...DEFAULT_DARWIN_CONFIG,
 				enabled: true,
 				autonomyLevel: 1,
 				traceCapture: true,

@@ -119,7 +119,7 @@ export class TraceCapture {
 			errorMessage: options.errorMessage,
 			mode: options.mode,
 			model: options.model,
-			metadata: options.metadata,
+			metadata: options.metadata || {},
 		}
 
 		// Add to memory cache
