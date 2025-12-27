@@ -977,7 +977,9 @@ describe('${skill.name}', () => {
 			.replace(/[^a-z0-9]+/g, "_")
 			.replace(/^_+|_+$/g, "")
 
-		return `skill_${cleanName}_${Date.now().toString(36)}`
+		// Include random suffix to ensure uniqueness even in rapid succession
+		const randomSuffix = Math.random().toString(36).substring(2, 8)
+		return `skill_${cleanName}_${Date.now().toString(36)}_${randomSuffix}`
 	}
 
 	private generateSkillName(signal: LearningSignal): string {

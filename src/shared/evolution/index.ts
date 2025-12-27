@@ -53,6 +53,9 @@ export {
 	createCouncil,
 	isMultiAgentCouncil,
 	getDefaultCouncil,
+	createTaskDelegatorAdapter,
+	createMultiAgentCouncilWithProvider,
+	isClineProviderLike,
 	type CouncilDecision,
 	type CouncilConfig,
 	type VotingPolicy,
@@ -61,6 +64,7 @@ export {
 	type MultiAgentCouncilEvent,
 	type DarwinConfigWithMultiAgent,
 	type CreateCouncilOptions,
+	type ClineProviderLike,
 } from "./council"
 
 // Export skills library (Phase 3)

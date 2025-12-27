@@ -2,6 +2,9 @@ import { safeWriteJson } from "../../utils/safeWriteJson"
 import * as path from "path"
 import * as os from "os"
 import * as fs from "fs/promises"
+import pWaitFor from "p-wait-for"
+import * as vscode from "vscode"
+import axios from "axios"
 import { fastApplyApiProviderSchema, getKiloUrlFromToken, isGlobalStateKey } from "@roo-code/types"
 import { getAppUrl } from "@roo-code/types"
 import {
@@ -54,7 +57,6 @@ import { openFile } from "../../integrations/misc/open-file"
 import { openImage, saveImage } from "../../integrations/misc/image-handler"
 import { selectImages } from "../../integrations/misc/process-images"
 import { getTheme } from "../../integrations/theme/getTheme"
-import { discreteLog10 } from "../../utils/discrete"
 import { discoverChromeHostUrl, tryChromeHostUrl } from "../../services/browser/browserDiscovery"
 import { searchWorkspaceFiles } from "../../services/search/file-search"
 import { fileExistsAtPath } from "../../utils/fs"
@@ -92,7 +94,9 @@ import { AutoPurgeScheduler } from "../../services/auto-purge"
 import { setPendingTodoList } from "../tools/UpdateTodoListTool"
 import { ManagedIndexer } from "../../services/code-index/managed/ManagedIndexer"
 import { SessionManager } from "../../shared/kilocode/cli-sessions/core/SessionManager" // kilocode_change
-import { MessageQueueService } from "../task-persistence/MessageQueueService" // kilocode_change
+import { MessageQueueService } from "../../core/message-queue/MessageQueueService" // kilocode_change
+
+const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
 
 export const webviewMessageHandler = async (
 	provider: ClineProvider,
@@ -1064,8 +1068,6 @@ export const webviewMessageHandler = async (
 				const lmStudioModels = await getModels({
 					provider: "lmstudio",
 					baseUrl: lmStudioApiConfig.lmStudioBaseUrl,
-					apiKey: lmStudioApiConfig.lmStudioApiKey,
-					numCtx: lmStudioApiConfig.lmStudioNumCtx,
 				})
 
 				if (Object.keys(lmStudioModels).length > 0) {
@@ -2429,7 +2431,7 @@ export const webviewMessageHandler = async (
 					provider.postMessageToWebview({
 						type: "marketplaceInstallResult",
 						success: false,
-						slug: null, // Slug not provided or not specified
+						slug: undefined, // Slug not provided or not specified
 					})
 				}
 			} catch (error) {
@@ -2440,7 +2442,7 @@ export const webviewMessageHandler = async (
 				provider.postMessageToWebview({
 					type: "marketplaceInstallResult",
 					success: false,
-					slug: null,
+					slug: undefined,
 					error: errorMessage,
 				})
 
@@ -2664,38 +2666,7 @@ export const webviewMessageHandler = async (
 			}
 			break
 		case "fetchMcpMarketplace": {
-			const state = await provider.getState()
-			const { mcpMarketplaceEnabled } = message
-
-			const hasEnabledMarketplaceRequest = !state.mcpMarketplaceEnabled && mcpMarketplaceEnabled // To toggle ON (vs vice versa)
-
-			await provider.updateProfileData({
-				mcpMarketplaceEnabled: mcpMarketplaceEnabled ?? true,
-			})
-
-			await provider.fetchMcpMarketplace(mcpMarketplaceEnabled)
-
-			const isMcpMarketplaceSwitching = hasEnabledMarketplaceRequest
-
-			if (isMcpMarketplaceSwitching) {
-				/**
-				 * Don't update the MCP servers panel.
-				 * Waiting for the MCP team to notify us when it is ready.
-				 * DO NOT postStateToWebview/Call provider.fetchServers(), this would cause race conditions.
-				 * See: https://github.com/Kilo-Org/kilocode/pull/131#discussion_r1519604073
-				 */
-			} else {
-				const servers = state.mcpServers
-
-				const { refreshWorkflowToggles } = await import("../context/instructions/workflows")
-				await refreshWorkflowToggles(provider.context, provider.cwd)
-				//kilocode_change: Reload ghost model when API provider settings change
-				if (mcpMarketplaceEnabled) {
-					vscode.commands.executeCommand("kilo-code.ghost.reload")
-					await provider.fetchServers()
-					provider.postStateToWebview()
-				}
-			}
+			await provider.fetchMcpMarketplace(message.bool)
 			break
 		}
 

@@ -177,6 +177,8 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 		allowedCommands,
 		deniedCommands,
 		allowedMaxRequests,
+		allowedMaxCost,
+		language,
 		alwaysAllowBrowser,
 		alwaysAllowExecute,
 		alwaysAllowMcp,
@@ -232,18 +234,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 		maxImageFileSize,
 		maxTotalImageSize,
 		terminalCompressProgressBar,
-		// kilocode_change start: Fast Apply AI for code completion
-		fastApplyAiProvider: _fastApplyAiProvider,
-		fastApplyAiModel: _fastApplyAiModel,
-		fastApplyAiApiKey: _fastApplyAiApiKey,
-		fastApplyAwsRegion: _fastApplyAwsRegion,
-		fastApplyMaxTokens: _fastApplyMaxTokens,
-		fastApplyTemperature: _fastApplyTemperature,
-		fastApplyTopP: _fastApplyTopP,
-		fastApplyFrequencyPenalty: _fastApplyFrequencyPenalty,
-		fastApplyPresencePenalty: _fastApplyPresencePenalty,
-		// kilocode_change end: Fast Apply AI for code completion
-		maxConcurrentFileReads: _maxConcurrentFileReads,
+		_maxConcurrentFileReads,
 		allowVeryLargeReads, // kilocode_change
 		terminalCommandApiConfigId, // kilocode_change
 		condensingApiConfigId,
@@ -1054,6 +1045,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 							allowedMaxRequests={allowedMaxRequests ?? undefined}
 							allowedMaxCost={allowedMaxCost ?? undefined}
 							deniedCommands={deniedCommands}
+							requestDelaySeconds={requestDelaySeconds}
 							setCachedStateField={setCachedStateField}
 						/>
 					)}

@@ -680,7 +680,9 @@ export class SkillLibrary {
 			for (const [term, count] of termCounts) {
 				const tf = count / terms.length
 				const df = this.documentFrequency.get(term) ?? 1
-				const idf = Math.log(totalDocs / df)
+				// Use smoothed IDF to avoid zero scores when there's only 1 document
+				// log(1 + N/df) ensures scores > 0 even with single document
+				const idf = Math.log(1 + totalDocs / df)
 				entry.terms.set(term, tf * idf)
 			}
 

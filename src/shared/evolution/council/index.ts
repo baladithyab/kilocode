@@ -20,6 +20,14 @@ export {
 	type MultiAgentCouncilEvent,
 } from "./MultiAgentCouncil"
 
+// Re-export TaskDelegator adapter for ClineProvider integration
+export {
+	createTaskDelegatorAdapter,
+	createMultiAgentCouncilWithProvider,
+	isClineProviderLike,
+	type ClineProviderLike,
+} from "./TaskDelegatorAdapter"
+
 /**
  * Extended Darwin configuration with multi-agent options
  */

@@ -293,6 +293,14 @@ export class SkillExecutor {
 	 * This is a simplified version for MVP
 	 */
 	private extractMainFunction(code: string): ExecutionFunction | null {
+		// Helper to log to context if available
+		const logToContext = (ctx: unknown, msg: string) => {
+			const context = ctx as { console?: { log?: (...msgs: unknown[]) => void } } | undefined
+			if (context?.console?.log) {
+				context.console.log(msg)
+			}
+		}
+
 		// Look for export default function
 		const defaultExportMatch = code.match(
 			/export\s+default\s+(?:async\s+)?function\s*\w*\s*\([^)]*\)\s*(?::\s*\w+)?\s*\{/,
@@ -300,9 +308,9 @@ export class SkillExecutor {
 		if (defaultExportMatch) {
 			// For MVP, we return a placeholder that simulates execution
 			// Real implementation would compile TypeScript and execute
-			return async (args: unknown) => {
-				// Simulate execution - in real implementation, this would
-				// use ts-node, esbuild, or vm2 to execute the code
+			return async (args: unknown, context?: unknown) => {
+				// Simulate execution - log to context.console if provided
+				logToContext(context, "[MVP] Simulated execution of skill")
 				return {
 					message: "TypeScript execution simulated (MVP mode)",
 					args,
@@ -314,7 +322,8 @@ export class SkillExecutor {
 		// Look for named export
 		const namedExportMatch = code.match(/export\s+(?:async\s+)?function\s+(\w+)\s*\([^)]*\)/)
 		if (namedExportMatch) {
-			return async (args: unknown) => {
+			return async (args: unknown, context?: unknown) => {
+				logToContext(context, `[MVP] Simulated execution of ${namedExportMatch[1]}`)
 				return {
 					message: "TypeScript execution simulated (MVP mode)",
 					functionName: namedExportMatch[1],
@@ -327,7 +336,8 @@ export class SkillExecutor {
 		// Look for export const with arrow function
 		const constExportMatch = code.match(/export\s+const\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/)
 		if (constExportMatch) {
-			return async (args: unknown) => {
+			return async (args: unknown, context?: unknown) => {
+				logToContext(context, `[MVP] Simulated execution of ${constExportMatch[1]}`)
 				return {
 					message: "TypeScript execution simulated (MVP mode)",
 					constantName: constExportMatch[1],
