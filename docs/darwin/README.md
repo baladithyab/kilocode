@@ -1,46 +1,58 @@
 # Darwin Evolution System Documentation
 
-The Darwin Evolution System transforms Kilocode from a static development tool into a self-improving AI coding assistant. This documentation covers the architecture, design, and implementation of this system.
+> **Transform Kilocode from a static development tool into a self-improving AI coding assistant.**
 
-## Overview
+The Darwin Evolution System enables Kilocode to autonomously synthesize new capabilities, optimize its configuration, detect and break failure loops, and evolve its behavior based on project-specific needs.
 
-Darwin enables Kilocode to:
+## 🚀 Quick Start
 
-- **Autonomous Skill Synthesis**: Detect capability gaps and write its own tools (Skills) to fill them
-- **Deep Configuration Evolution**: Optimize every aspect of Kilocode based on success patterns
-- **Project-Local Adaptation**: Leverage `.kilocodemodes` and `.kilocoderules` for workspace-specific behavior
-- **Self-Healing Workflows**: Detect and break "doom loops" (repetitive failures)
+**New to Darwin?** Start here:
 
-## Documentation Structure
+1. 📖 **[Research Summary](./RESEARCH_SUMMARY.md)** - Executive overview of the entire system
+2. 🏗️ **[Unified Architecture](./04-unified-architecture.md)** - Complete architecture diagram
+3. 🗺️ **[Implementation Roadmap](./05-implementation-roadmap.md)** - Phased development plan
 
-| Document                                                                   | Description                                                                                                   |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [01-analysis.md](./01-analysis.md)                                         | Initial analysis of Darwin patterns and how they map to Kilocode's architecture                               |
-| [02-architecture.md](./02-architecture.md)                                 | Detailed architectural design including components, data schemas, and sequence diagrams                       |
-| [03-advanced-capabilities.md](./03-advanced-capabilities.md)               | Advanced capabilities including Anthropic's Skills pattern, configuration evolution, and local mode overrides |
-| [04-unified-architecture.md](./04-unified-architecture.md)                 | Unified architecture combining all concepts into a cohesive system design                                     |
-| [05-implementation-roadmap.md](./05-implementation-roadmap.md)             | Phased implementation plan with tasks, testing requirements, and success criteria                             |
-| [06-phase4-autonomy-architecture.md](./06-phase4-autonomy-architecture.md) | Detailed architecture for Phase 4: Autonomous Execution, Multi-Agent Council, and LLM Synthesis               |
-| [07-phase4-usage-guide.md](./07-phase4-usage-guide.md)                     | User guide for configuring and using Phase 4 features                                                         |
+## 📚 Documentation Index
 
-## Reading Order
+### Core Documentation
 
-For the best understanding, read the documents in numerical order:
+| #   | Document                                                       | Description                                                            |
+| --- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 📊  | [RESEARCH_SUMMARY.md](./RESEARCH_SUMMARY.md)                   | **Start here** - Executive overview, key findings, and quick reference |
+| 01  | [01-analysis.md](./01-analysis.md)                             | Initial analysis of Darwin patterns and Kilocode mapping               |
+| 02  | [02-architecture.md](./02-architecture.md)                     | Detailed architectural design, schemas, and sequence diagrams          |
+| 03  | [03-advanced-capabilities.md](./03-advanced-capabilities.md)   | Skills pattern, configuration evolution, local mode overrides          |
+| 04  | [04-unified-architecture.md](./04-unified-architecture.md)     | Unified architecture combining all concepts                            |
+| 05  | [05-implementation-roadmap.md](./05-implementation-roadmap.md) | Implementation plan with tasks and success criteria                    |
 
-1. **Analysis** - Understand the problem space and initial mapping
-2. **Architecture** - Deep dive into system components
-3. **Advanced Capabilities** - Learn about skill synthesis and evolution strategies
-4. **Unified Architecture** - See how everything fits together
-5. **Implementation Roadmap** - Follow the step-by-step implementation plan
-6. **Phase 4 Architecture** - Understand the autonomous execution engine
-7. **Phase 4 Usage Guide** - Learn how to use the new capabilities
+### Phase 4: Autonomy
 
-## Core Concepts
+| #   | Document                                                                   | Description                                              |
+| --- | -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 06  | [06-phase4-autonomy-architecture.md](./06-phase4-autonomy-architecture.md) | Autonomous execution, Multi-Agent Council, LLM synthesis |
+| 07  | [07-phase4-usage-guide.md](./07-phase4-usage-guide.md)                     | User guide for Phase 4 features                          |
+
+### Research & Analysis
+
+| Document                                                       | Description                                           |
+| -------------------------------------------------------------- | ----------------------------------------------------- |
+| [08-architecture-review.md](./08-architecture-review.md)       | Comprehensive architecture review and recommendations |
+| [09-enhancement-research.md](./09-enhancement-research.md)     | Enhancement opportunities and integration research    |
+| [SETTINGS_RESEARCH.md](./SETTINGS_RESEARCH.md)                 | Kilocode settings management integration              |
+| [DARWIN_CLAUDE_CODE_PLUGIN.md](./DARWIN_CLAUDE_CODE_PLUGIN.md) | Claude Code Plugin specification with meta-evolution  |
+
+## 🎯 Key Concepts
 
 ### The Evolution Loop
 
 ```
-Trace → Analyze → Propose → Validate → Apply
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   Trace  →  Analyze  →  Propose  →  Validate  →  Apply     │
+│     ↑                                              │        │
+│     └──────────────────────────────────────────────┘        │
+│                      (Continuous Loop)                       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 1. **Trace**: Capture execution data (tool use, errors, user feedback)
@@ -49,17 +61,121 @@ Trace → Analyze → Propose → Validate → Apply
 4. **Validate**: Council system reviews proposals for safety
 5. **Apply**: Evolution Manager applies approved changes
 
-### Key Components
+### Core Insights
 
-- **Trace System**: Captures high-fidelity execution events
-- **Analysis Engine**: Detects patterns and improvement opportunities
-- **Proposal System**: Generates structured change proposals
-- **Council System**: Multi-agent review board for validation
-- **Evolution Manager**: Applies approved changes
-- **Skills Library**: Repository of synthesized capabilities
+| Insight                   | Description                                                     |
+| ------------------------- | --------------------------------------------------------------- |
+| **Modes are Agents**      | Custom Modes are the specialized agents - no new concept needed |
+| **Delegation is Council** | `delegateParentAndOpenChild` enables multi-agent collaboration  |
+| **Telemetry is Trace**    | Existing `TelemetryService` and `TaskHistory` provide the data  |
+| **MCP is Tool Layer**     | Dynamic tool creation through MCP synthesis                     |
+| **Evolution is a Task**   | Self-improvement is a visible, user-controllable process        |
 
-## Related Documentation
+### Component Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Darwin Evolution System                   │
+├─────────────────────────────────────────────────────────────┤
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐ │
+│  │   Trace   │→→│  Analysis │→→│ Proposals │→→│  Council  │ │
+│  │  System   │  │  Engine   │  │  System   │  │  System   │ │
+│  └───────────┘  └───────────┘  └───────────┘  └─────┬─────┘ │
+│                                                     ↓       │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐ │
+│  │   Skills  │←←│  Change   │←←│ Evolution │←←│ Autonomous│ │
+│  │  Library  │  │ Applicator│  │  Manager  │  │ Executor  │ │
+│  └───────────┘  └───────────┘  └───────────┘  └───────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 🔧 For Developers
+
+### Code Location
+
+The Darwin implementation lives in:
+
+```
+src/shared/evolution/
+├── DarwinService.ts        # Main entry point
+├── core/                   # Core types and utilities
+├── trace/                  # Event capture
+├── analysis/               # Pattern detection
+├── proposals/              # Proposal generation
+├── council/                # Governance system
+├── skills/                 # Skill synthesis
+├── application/            # Change application
+├── autonomy/               # Auto-execution
+└── state/                  # State management
+```
+
+### Running Tests
+
+```bash
+# From the src directory
+cd src && pnpm test shared/evolution
+```
+
+### Key Interfaces
+
+```typescript
+// packages/types/src/evolution.ts
+interface TraceEvent {
+	/* Captured execution event */
+}
+interface EvolutionProposal {
+	/* Proposed system change */
+}
+interface Skill {
+	/* Synthesized capability */
+}
+interface CouncilResult {
+	/* Review decision */
+}
+interface EvolutionState {
+	/* System state */
+}
+```
+
+## 📖 Reading Order
+
+For comprehensive understanding, follow this path:
+
+```
+1. RESEARCH_SUMMARY.md     ─── Executive overview
+         ↓
+2. 01-analysis.md          ─── Problem space analysis
+         ↓
+3. 02-architecture.md      ─── System components
+         ↓
+4. 03-advanced-capabilities.md ─── Skills & evolution
+         ↓
+5. 04-unified-architecture.md  ─── Complete picture
+         ↓
+6. 05-implementation-roadmap.md ─── Implementation plan
+         ↓
+7. 06-07 (Phase 4 docs)    ─── Autonomous features
+         ↓
+8. 08-09 (Research docs)   ─── Deep analysis
+```
+
+## 🔗 Related Documentation
 
 - [Contributing Guide](../../CONTRIBUTING.md)
-- [Development Setup](../../DEVELOPMENT.md)
 - [Architecture Overview](../../apps/kilocode-docs/docs/contributing/architecture.md)
+- [Types Package](../../packages/types/src/evolution.ts)
+
+## 📝 Document Status
+
+| Document                  | Status      | Last Updated |
+| ------------------------- | ----------- | ------------ |
+| Research Summary          | ✅ Complete | Dec 2024     |
+| Core Architecture (01-05) | ✅ Complete | Dec 2024     |
+| Phase 4 (06-07)           | ✅ Complete | Dec 2024     |
+| Research (08-09)          | ✅ Complete | Dec 2024     |
+| Settings Research         | ✅ Complete | Dec 2024     |
+| Claude Code Plugin        | ✅ Complete | Dec 2024     |
+
+---
+
+_Darwin: Evolving the future of coding, one prompt at a time._
