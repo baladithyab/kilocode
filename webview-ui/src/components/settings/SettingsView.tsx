@@ -234,7 +234,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>((props, ref)
 		maxImageFileSize,
 		maxTotalImageSize,
 		terminalCompressProgressBar,
-		_maxConcurrentFileReads,
 		allowVeryLargeReads, // kilocode_change
 		terminalCommandApiConfigId, // kilocode_change
 		condensingApiConfigId,
